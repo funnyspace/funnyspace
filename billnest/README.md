@@ -36,6 +36,8 @@ This does **not** claim GST invoicing compliance. Actual invoices can require HS
 
 GitHub Pages hosts only the **website code**. It does not sync your products or invoices between devices.
 
+The source was also added under `billnest/` in the connected `funnyspace/funnyspace` repository. For that repository, enable Pages for `main` / `(root)`, then visit `https://funnyspace.github.io/funnyspace/billnest/` once GitHub reports a successful deployment. For a dedicated repository, use the steps above.
+
 ## Project files
 
 - `index.html`: page shell, app loading and sidebar.
@@ -44,4 +46,4 @@ GitHub Pages hosts only the **website code**. It does not sync your products or 
 - `app.js`: screens, interactions and local browser storage.
 - `tests/logic.test.mjs`: tests for billing calculations and stock validation.
 
-Run the logic tests with `node --test tests/logic.test.mjs` (Node.js 18+).
+Run all tests with `node --test tests/*.test.mjs` (Node.js 18+).
