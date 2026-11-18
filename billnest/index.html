@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101e30">
+  <meta name="description" content="BillNest. Simple inventory tracking and GST-aware billing for small shops.">
+  <title>BillNest | Smart Inventory & Billing</title>
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div id="app" class="app-shell">
+    <aside class="sidebar" aria-label="Main navigation">
+      <div class="brand"><div class="brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32"><rect x="4" y="4" width="11" height="11" rx="3" fill="currentColor"/><rect x="17" y="4" width="11" height="11" rx="3" fill="currentColor" opacity=".45"/><rect x="4" y="17" width="11" height="11" rx="3" fill="currentColor" opacity=".45"/><path d="M19 23h7M22.5 19.5v7" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg></div><div><strong>billnest<span class="brand-period">.</span></strong><small>INVENTORY + BILLING</small></div></div>
+      <p class="sidebar-caption">WORKSPACE</p>
+      <nav id="navigation"></nav>
+      <div class="sidebar-bottom"><div class="store-avatar" id="storeAvatar">BN</div><div class="store-meta"><b id="storeName">My Store</b><small>Local workspace</small></div><button type="button" class="icon-button sidebar-settings" data-go="settings" title="Store settings" aria-label="Store settings">⚙</button></div>
+    </aside>
+    <div class="main-shell">
+      <header class="topbar"><button type="button" class="mobile-menu" id="menuToggle" aria-label="Open navigation">☰</button><div class="page-heading"><div class="eyebrow" id="breadcrumb">WORKSPACE / OVERVIEW</div><h1 id="pageTitle">Overview</h1></div><div class="top-actions"><span class="local-pill"><span class="local-dot"></span> Saved on this device</span><button type="button" class="btn btn-primary top-new" data-go="billing"><span class="plus-sign">+</span> New invoice</button></div></header>
+      <main id="main" class="page-content" tabindex="-1"></main>
+    </div>
+  </div>
+  <div id="modalLayer"></div><div id="toastLayer" role="status" aria-live="polite"></div><div id="printLayer"></div>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
