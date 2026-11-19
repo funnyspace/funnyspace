@@ -28,3 +28,18 @@ test('billing generates invoice and subtracts stock',()=>{
  assert.match(node('#modalLayer').innerHTML,/INVOICE/);
 });
 test('can clear demo to an empty workspace',()=>{clickAction('reset-data');const db=JSON.parse(items.get('billnest-workspace-v1'));assert.equal(db.invoices.length,0);assert.equal(db.products.length,0);assert.equal(db.demo,false);assert.match(node('#main').innerHTML,/No invoices yet/)});
+test('billing route is clearly named and reachable from dashboard',()=>{
+  clickGo('dashboard');
+  assert.match(node('#navigation').innerHTML,/>Billing<\/span>/);
+  assert.match(node('#main').innerHTML,/quick-start-action quick-billing/);
+  clickGo('billing');
+  assert.match(node('#main').innerHTML,/Billing &amp; checkout|Billing & checkout/);
+});
+test('modal backdrop does not swallow product form submit clicks',()=>{
+  clickGo('inventory');
+  clickAction('add-product');
+  const modal=node('#modalLayer').innerHTML;
+  assert.match(modal,/id="productForm"/);
+  assert.match(modal,/class="modal-overlay" role="presentation"/);
+  assert.doesNotMatch(modal,/class="modal-overlay"[^>]*data-action/);
+});
