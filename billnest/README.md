@@ -2,14 +2,20 @@
 
 A clean, mobile-friendly starter website for a small shop, with product and stock tracking, customers, GST-aware invoicing, printable invoices and basic reports. **No npm install, database or paid server is needed to try it.**
 
-## Run locally
+## Open the website
 
-1. Download the ZIP and extract it.
-2. Open `index.html` in Chrome or Edge, or run `python -m http.server 8000` inside the folder and open `http://localhost:8000`.
-3. A clearly labelled **demo workspace** appears first. Click **Start with an empty store** to erase the sample records.
-4. Enter your shop information in **Settings**, then add products, customers and create bills.
+1. Download the ZIP, extract the `billnest` folder, and **double-click `index.html`** in a modern browser. The included `app.bundle.js` works without a web server and does not need npm.
+2. Choose **Billing** in the left sidebar. On phones, use the **Billing** tab in the fixed bottom navigation.
+3. The dashboard offers one-click actions for **Billing**, **Add product**, and **View invoices**.
+4. A clearly labelled **demo workspace** appears first. Click **Start with an empty store** to remove sample data, then add products in **Inventory** and create your own invoice.
 
-Note: Because the application uses ES modules, some browsers disallow opening `index.html` directly using `file://`. Use a local web server if the page is blank.
+If opening files is restricted by your browser, serve the folder using `python -m http.server 8000` and visit `http://localhost:8000`.
+
+Direct page links work using URL hashes such as `index.html#dashboard`, `index.html#billing`, and `index.html#inventory`. The browser's Back and Forward navigation works with these links.
+
+## Development
+
+The editable source is split between `app.js` (screens and events) and `logic.mjs` (calculations). The website loads `app.bundle.js` to avoid browser module/CORS issues when opening the ZIP. **After editing app.js or logic.mjs, regenerate the bundle** with `node scripts/build.mjs`. Test with `node --test tests/*.test.mjs` (Node.js 18+).
 
 ## Features
 
@@ -36,14 +42,16 @@ This does **not** claim GST invoicing compliance. Actual invoices can require HS
 
 GitHub Pages hosts only the **website code**. It does not sync your products or invoices between devices.
 
-The source was also added under `billnest/` in the connected `funnyspace/funnyspace` repository. For that repository, enable Pages for `main` / `(root)`, then visit `https://funnyspace.github.io/funnyspace/billnest/` once GitHub reports a successful deployment. For a dedicated repository, use the steps above.
+The source is in the `billnest/` folder of the connected `funnyspace/funnyspace` repository. GitHub Pages must be enabled separately. With Pages set to `main` / `(root)`, the direct Billing URL will be `https://funnyspace.github.io/funnyspace/billnest/#billing`. GitHub source upload alone is not a live deployment. For a dedicated repository, use the steps above.
 
 ## Project files
 
 - `index.html`: page shell, app loading and sidebar.
 - `styles.css`: responsive application design and invoice print stylesheet.
 - `logic.mjs`: tax arithmetic, safe HTML text and CSV encoding.
-- `app.js`: screens, interactions and local browser storage.
+- `app.js`: editable screens, interactions and local browser storage.
+- `app.bundle.js`: browser-ready script, used by `index.html`.
+- `scripts/build.mjs`: regenerate the portable bundle after editing the source.
 - `tests/logic.test.mjs`: tests for billing calculations and stock validation.
 
 Run all tests with `node --test tests/*.test.mjs` (Node.js 18+).
