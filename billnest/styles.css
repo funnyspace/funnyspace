@@ -121,3 +121,16 @@
 .scanner-optics [hidden],#scannerZoomWrap[hidden],#scannerCameraWrap[hidden]{display:none!important}
 @media(max-width:700px){.scanner-preview{max-height:38dvh;min-height:200px}.scanner-guide{inset:29% 5% 30%}.scanner-top{padding-bottom:11px}.scanner-status{margin-top:8px;margin-bottom:10px}}
 @media(max-width:380px){.scanner-actions .btn{flex:1 1 40%;font-size:12px}.scanner-distance{margin-bottom:8px}.scanner-photo-hint{margin-bottom:8px}}
+
+/* Store-configured invoice terms appear on the lower-left beside bill totals. */
+.terms-editor{min-height:150px!important;height:auto!important;line-height:1.55;resize:vertical}
+.settings-term-help{color:#748495;font-size:12px;line-height:1.55;margin:0 0 14px}
+.invoice-bottom{display:grid;grid-template-columns:minmax(0,1fr) 240px;gap:22px;align-items:end;margin:20px 0 0}
+.invoice-bottom-left{min-width:0;display:flex;flex-direction:column;justify-content:flex-end;gap:12px}
+.invoice-terms{min-width:0;color:#3f4e59;text-align:left;overflow-wrap:anywhere;break-inside:avoid-page;page-break-inside:avoid}
+.invoice-terms h4{font-size:11px;font-weight:800;color:#273746;margin:0 0 6px}
+.invoice-paper .invoice-terms p{white-space:pre-wrap;overflow-wrap:anywhere;word-break:normal;font-size:10px;line-height:1.5;color:#556575;margin:0}
+.invoice-paper .invoice-notes{margin:0;overflow-wrap:anywhere}
+.invoice-bottom .invoice-total{width:100%;margin:0}
+@media(max-width:520px){.invoice-bottom{grid-template-columns:minmax(0,1fr);gap:14px}.invoice-bottom .invoice-total{max-width:240px;justify-self:end}}
+@media print{.invoice-bottom{grid-template-columns:minmax(0,1fr) 240px;align-items:end}.invoice-terms{break-inside:avoid-page;page-break-inside:avoid}.invoice-terms h4,.invoice-terms p{color:#222!important}}
