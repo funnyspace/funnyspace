@@ -75,9 +75,131 @@ function sampleDb(){
 function readDb(){try{const raw=localStorage.getItem(STORE_KEY);if(!raw)return sampleDb();const data=JSON.parse(raw);if(!data || data.version!==1 || !Array.isArray(data.products)||!Array.isArray(data.invoices)||!Array.isArray(data.customers))throw Error('Unsupported data');return {...emptyDb(),...data,settings:{...emptyDb().settings,...data.settings}};}catch(err){console.warn('Could not read existing workspace:',err);return emptyDb()}}
 let db=readDb();
 const pageFromHash = () => {const page=(globalThis.location?.hash||'').replace(/^#\/?/,'').split('/')[0].toLowerCase();return PAGES.some(p=>p[0]===page)?page:'dashboard'};
-let ui={page:pageFromHash(),search:'',filter:'all',salesSearch:'',customerSearch:'',reportRange:'30',modal:null,editId:null,cart:[],billingSearch:'',billingCustomer:'',discount:0,payment:'Cash',billNotes:'',invoiceId:null};
+let ui={page:pageFromHash(),search:'',filter:'all',salesSearch:'',customerSearch:'',reportRange:'30',modal:null,editId:null,cart:[],billingSearch:'',billingCustomer:'',discount:0,payment:'Cash',billNotes:'',invoiceId:null,scanCode:'',addAfterScan:false};
 let toastTimer;
 const productsMap = () => Object.fromEntries(db.products.map(p=>[p.id,p]));
+const cleanBarcode = code => String(code??'').trim().slice(0,80);
+const matchBarcode = code => {
+ const normalized=cleanBarcode(code).toLowerCase();
+ return normalized ? db.products.find(p=>[p.barcode,p.sku].some(value=>String(value||'').trim().toLowerCase()===normalized)) : undefined;
+};
+const scanner = {open:false,mode:'billing',session:0,stream:null,controls:null,timer:null,busy:false,last:'',lastSeenAt:0};
+const scannerStatus = (message,type='info') => {const el=$('#scannerStatus');if(el){el.textContent=message;el.dataset.state=type}};
+function stopScanner(){
+ scanner.session++;scanner.open=false;clearTimeout(scanner.timer);scanner.timer=null;
+ try{scanner.controls?.stop?.()}catch(err){console.warn('Scanner stop:',err)}scanner.controls=null;
+ scanner.stream?.getTracks?.().forEach(track=>track.stop());scanner.stream=null;
+ const vid=$('#scannerVideo');if(vid){vid.pause?.();vid.srcObject=null}
+ const layer=$('#scannerLayer');if(layer)layer.innerHTML='';
+ document.body.classList.remove('scanner-open');
+}
+function scannerMarkup(mode){
+ const title=mode==='inventory'?'Scan to find or add stock':mode==='product'?'Scan product barcode':'Scan items for billing';
+ const desc=mode==='billing'?'Point at a barcode. Each successful scan adds one item to the bill.':mode==='inventory'?'Known codes open the product. New codes open a prefilled product form.':'The scanned code will fill the barcode field.';
+ return `<div class="scanner-overlay" role="dialog" aria-modal="true" aria-label="Barcode scanner"><div class="scanner-panel"><div class="scanner-top"><div><span class="scanner-eyebrow">BILLNEST SCANNER</span><h2>${title}</h2><p>${desc}</p></div><button type="button" class="scanner-close" data-action="close-scanner" aria-label="Close scanner">×</button></div><div class="scanner-preview"><video id="scannerVideo" muted playsinline autoplay aria-label="Camera preview"></video><div class="scanner-guide" aria-hidden="true"><span></span></div><span class="scanner-camera-label">Align the barcode inside the frame</span></div><p id="scannerStatus" class="scanner-status" role="status" aria-live="polite">Starting camera…</p><div class="scanner-actions"><button type="button" class="btn" data-action="scanner-torch" id="scannerTorch" hidden>⚡ Flashlight</button><button type="button" class="btn" data-action="scanner-retry">↻ Retry camera</button></div><form id="scanManualForm" class="scanner-manual-form"><label for="manualBarcode">Barcode not scanning? Enter it here</label><div class="scanner-manual-row"><input id="manualBarcode" name="barcode" placeholder="Enter barcode or SKU" autocomplete="off" autocapitalize="off" inputmode="text" maxlength="80" required><button class="btn btn-primary" type="submit">Use code</button></div></form><p class="scanner-hint">Camera requires HTTPS and your permission. No video is uploaded. A barcode identifies an item but does not supply its price or description.</p></div></div>`;
+}
+function openScanner(mode='billing'){
+ if(scanner.open)stopScanner();
+ scanner.open=true;scanner.mode=mode;scanner.last='';scanner.lastSeenAt=0;
+ $('#scannerLayer').innerHTML=scannerMarkup(mode);
+ document.body.classList.add('scanner-open');
+ startScannerCamera();
+}
+function barcodeFound(raw,explicit=false){
+ if(!scanner.open)return;
+ const code=cleanBarcode(raw);if(!code)return;
+ const when=Date.now();
+ if(!explicit&&code===scanner.last&&when-scanner.lastSeenAt<1400){scanner.lastSeenAt=when;return}
+ scanner.last=code;scanner.lastSeenAt=when;
+ if(scanner.mode==='product'){
+  stopScanner();const input=$('#barcode');if(input){input.value=code;input.focus()}
+  const sku=$('#sku');if(sku&&!sku.value.trim())sku.value=code.slice(0,40);
+  toast('Barcode captured. Finish entering product details.');return;
+ }
+ const product=matchBarcode(code);
+ if(scanner.mode==='inventory'){
+  stopScanner();if(product){navigate('inventory');openModal('product',product.id);toast('Product found by barcode.')}else{ui.scanCode=code;ui.addAfterScan=false;openModal('product');toast('New barcode. Add the product details.')}return;
+ }
+ if(product){
+  const current=ui.cart.find(line=>line.productId===product.id);
+  if(product.stock<=0||(current&&current.qty>=product.stock)){scannerStatus(`${product.name} is out of stock or already fully added.`,'error');return}
+  if(current)current.qty++;else ui.cart.push({productId:product.id,qty:1});
+  scannerStatus(`✓ ${product.name} added. Point at the next barcode.`,'success');
+  if(navigator.vibrate)navigator.vibrate(65);
+  render();return;
+ }
+ stopScanner();ui.scanCode=code;ui.addAfterScan=true;openModal('product');
+ toast('This barcode is not in inventory. Add the product to continue billing.');
+}
+let fallbackLoader;
+function loadBarcodeLibrary(){
+ if(globalThis.ZXingBrowser?.BrowserMultiFormatReader)return Promise.resolve(globalThis.ZXingBrowser);
+ if(fallbackLoader)return fallbackLoader;
+ fallbackLoader=new Promise((resolve,reject)=>{
+  const script=document.createElement('script');script.src='https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/umd/zxing-browser.min.js';
+  script.async=true;script.onload=()=>globalThis.ZXingBrowser?.BrowserMultiFormatReader?resolve(globalThis.ZXingBrowser):reject(new Error('ZXing could not initialise'));
+  script.onerror=()=>reject(new Error('Barcode library could not load. Check your internet connection.'));
+  document.head.appendChild(script);
+ }).catch(err=>{fallbackLoader=null;throw err});
+ return fallbackLoader;
+}
+async function startScannerCamera(){
+ if(!scanner.open)return;
+ const session=++scanner.session;scannerStatus('Starting camera…');
+ const video=$('#scannerVideo');
+ if(!globalThis.isSecureContext||!navigator.mediaDevices?.getUserMedia){scannerStatus('Camera requires a secure HTTPS site and browser permission. You can enter the barcode manually.','error');return}
+ try{
+  if('BarcodeDetector' in globalThis){
+   let detector;
+   try{
+    const wanted=['ean_13','ean_8','upc_a','upc_e','code_128','code_39','itf','qr_code','data_matrix'];
+    const supported=await globalThis.BarcodeDetector.getSupportedFormats?.();
+    const formats=Array.isArray(supported)?wanted.filter(f=>supported.includes(f)):wanted;
+    detector=new globalThis.BarcodeDetector(formats.length?{formats}:undefined);
+   }catch(err){console.info('Native barcode API unavailable, trying fallback.',err)}
+   if(detector){
+    const stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}}});
+    if(!scanner.open||session!==scanner.session){stream.getTracks().forEach(t=>t.stop());return}
+    scanner.stream=stream;video.srcObject=stream;await video.play();
+    if(!scanner.open||session!==scanner.session)return;
+    const track=stream.getVideoTracks()[0];const torchButton=$('#scannerTorch');
+    if(torchButton&&track?.getCapabilities?.().torch)torchButton.hidden=false;
+    scannerStatus('Camera ready. Hold the barcode steady in the frame.');
+    const tick=async()=>{
+     if(!scanner.open||scanner.session!==session)return;
+     if(!scanner.busy&&video.readyState>=2){
+      scanner.busy=true;
+      try{const found=await detector.detect(video);if(found.length&&scanner.session===session)barcodeFound(found[0].rawValue)}catch(err){console.info('Barcode frame was not readable:',err)}finally{scanner.busy=false}
+     }
+     if(scanner.open&&scanner.session===session)scanner.timer=setTimeout(tick,170);
+    };
+    tick();return;
+   }
+  }
+  // iOS Safari and other browsers may not implement BarcodeDetector.
+  scannerStatus('Loading barcode scanner…');
+  const zxing=await loadBarcodeLibrary();
+  if(!scanner.open||scanner.session!==session)return;
+  const reader=new zxing.BrowserMultiFormatReader();
+  const controls=await reader.decodeFromVideoDevice(undefined,video,(result,error,control)=>{
+   if(!scanner.open||session!==scanner.session)return;
+   if(control&&!scanner.controls)scanner.controls=control;
+   if(result)barcodeFound(result.getText());
+  });
+  if(!scanner.open||scanner.session!==session){controls?.stop?.();return}
+  scanner.controls=controls;scannerStatus('Camera ready. Hold the barcode steady in the frame.');
+ }catch(err){
+  if(session!==scanner.session||!scanner.open)return;
+  console.warn('Scanner camera unavailable:',err);
+  scanner.stream?.getTracks?.().forEach(track=>track.stop());scanner.stream=null;
+  scannerStatus(err?.name==='NotAllowedError'?'Camera permission denied. Enable it in browser settings, or enter the code manually.':err?.name==='NotFoundError'?'No camera was found. Enter the barcode manually.':`Camera unavailable: ${err.message||'try again or enter the barcode manually.'}`,'error');
+ }
+}
+async function toggleScannerTorch(){
+ const track=scanner.stream?.getVideoTracks?.()[0];if(!track?.applyConstraints)return;
+ try{const enabled=!scanner.torch;await track.applyConstraints({advanced:[{torch:enabled}]});scanner.torch=enabled;const button=$('#scannerTorch');if(button)button.textContent=enabled?'⚡ Turn off flashlight':'⚡ Flashlight'}catch{scannerStatus('The flashlight is not available on this camera.','error')}
+}
+
 function save(){try{localStorage.setItem(STORE_KEY,JSON.stringify(db));return true}catch(err){console.error(err);toast('Could not save. Browser storage is unavailable or full. Export a backup.','error');return false}}
 function toast(message,type='ok'){const node=$('#toastLayer');node.innerHTML=`<div class="toast ${type==='error'?'error':''}">${e(message)}</div>`;clearTimeout(toastTimer);toastTimer=setTimeout(()=>node.innerHTML='',4300)}
 const num = v => Number(v)||0;
@@ -104,7 +226,7 @@ function render(){
  try{$('#main').innerHTML=screens[ui.page]()}catch(err){console.error('BillNest screen error:',err);$('#main').innerHTML=`<section class="card section-card" role="alert"><h2>Unable to display this section</h2><p>Please return to Dashboard, or restore your latest backup in Settings.</p><button class="btn btn-primary" data-go="dashboard">Go to Dashboard</button></section>`;}
  if(ui.modal)renderModal();else $('#modalLayer').innerHTML='';
 }
-function navigate(page,updateHash=true){if(!PAGES.some(p=>p[0]===page))return;ui.page=page;ui.modal=null;ui.search='';ui.filter='all';ui.billingSearch='';render();$('.sidebar').classList.remove('open');$('#backdrop')?.classList.remove('show');if(updateHash&&globalThis.location&&location.hash!=='#'+page)location.hash=page;window.scrollTo?.({top:0,behavior:'instant'});}
+function navigate(page,updateHash=true){if(!PAGES.some(p=>p[0]===page))return;if(scanner.open)stopScanner();ui.page=page;ui.modal=null;ui.search='';ui.filter='all';ui.billingSearch='';render();$('.sidebar').classList.remove('open');$('#backdrop')?.classList.remove('show');if(updateHash&&globalThis.location&&location.hash!=='#'+page)location.hash=page;window.scrollTo?.({top:0,behavior:'instant'});}
 window.addEventListener('hashchange',()=>{const page=pageFromHash();if(page!==ui.page)navigate(page,false)});
 function renderDashboard(){
  const daily=db.invoices.filter(i=>i.date===today()),todayRevenue=daily.reduce((s,i)=>s+i.total,0);
@@ -120,15 +242,15 @@ function renderDashboard(){
  <section class="card recent-card"><div class="section-title" style="padding:20px 22px 0;margin-bottom:8px"><h3>Recent invoices</h3><button class="section-link" data-go="sales">View all →</button></div>${recent.length?`<div class="table-scroll"><table class="data-table"><thead><tr><th>Invoice</th><th>Customer</th><th>Date</th><th>Payment</th><th>Amount</th><th></th></tr></thead><tbody>${recent.map(x=>`<tr><td><strong>${e(x.number)}</strong></td><td>${e(x.customer?.name||'Walk-in customer')}</td><td>${formatDate(x.date)}</td><td><span class="chip ${x.paid?'green':'yellow'}">${x.paid?'Paid':'Unpaid'}</span></td><td><strong>${money(x.total)}</strong></td><td><button class="btn btn-sm" data-action="view-invoice" data-id="${x.id}">View</button></td></tr>`).join('')}</tbody></table></div>`:empty('▧','No invoices yet','Start by creating your first invoice.','Create invoice','new-bill')}</section>`;
 }
 function renderInventory(){
- const q=ui.search.trim().toLowerCase();const filtered=db.products.filter(p=>(!q||[p.name,p.sku,p.category].some(s=>String(s).toLowerCase().includes(q)))&&(ui.filter==='all'||ui.filter==='low'&&p.stock<=p.lowStock||ui.filter==='out'&&p.stock===0));
- return `${sectionHeader('Your products','Add products, manage prices and keep stock accurate.',`<button class="btn" data-action="export-products">↓ Export CSV</button><button class="btn btn-primary" data-action="add-product">+ Add product</button>`)}<section class="card card-table"><div class="table-top"><div class="searchbox"><input type="search" data-search="inventory" value="${e(ui.search)}" placeholder="Search product, SKU or category..." aria-label="Search inventory"></div><select class="select-input" data-filter="inventory" aria-label="Filter products"><option value="all" ${ui.filter==='all'?'selected':''}>All products</option><option value="low" ${ui.filter==='low'?'selected':''}>Low stock</option><option value="out" ${ui.filter==='out'?'selected':''}>Out of stock</option></select></div>${filtered.length?`<div class="table-scroll"><table class="data-table"><thead><tr><th>Product</th><th>Category</th><th>Selling price</th><th>Stock</th><th>GST</th><th>Status</th><th>Actions</th></tr></thead><tbody>${filtered.map((p,i)=>`<tr><td><div class="product-cell">${productAvatar(p,i)}<div><strong>${e(p.name)}</strong><small>${e(p.sku)}</small></div></div></td><td>${e(p.category||'Uncategorised')}</td><td><strong>${money(toPaise(p.price))}</strong></td><td>${p.stock} ${e(p.unit)}</td><td>${pct(p.gst)}</td><td>${productStatus(p)}</td><td><div class="menu-links"><button class="btn btn-sm" data-action="stock" data-id="${p.id}">+ Stock</button><button class="btn btn-sm" data-action="edit-product" data-id="${p.id}">Edit</button></div></td></tr>`).join('')}</tbody></table></div>`:empty('▤',q||ui.filter!=='all'?'No matching products':'No products yet',q||ui.filter!=='all'?'Try a different search or filter.':'Add your first product to track stock and create invoices.',q?'':'Add product',q?'':'add-product')}<div class="pagination-text">Showing ${filtered.length} of ${db.products.length} products</div></section>`;
+ const q=ui.search.trim().toLowerCase();const filtered=db.products.filter(p=>(!q||[p.name,p.sku,p.barcode,p.category].some(s=>String(s||'').toLowerCase().includes(q)))&&(ui.filter==='all'||ui.filter==='low'&&p.stock<=p.lowStock||ui.filter==='out'&&p.stock===0));
+ return `${sectionHeader('Your products','Add products, manage prices and keep stock accurate.',`<button class="btn btn-scan" data-action="scan-inventory">▣ Scan barcode</button><button class="btn" data-action="export-products">↓ Export CSV</button><button class="btn btn-primary" data-action="add-product">+ Add product</button>`)}<section class="card card-table"><div class="table-top"><div class="searchbox"><input type="search" data-search="inventory" value="${e(ui.search)}" placeholder="Search product, barcode or SKU..." aria-label="Search inventory"></div><select class="select-input" data-filter="inventory" aria-label="Filter products"><option value="all" ${ui.filter==='all'?'selected':''}>All products</option><option value="low" ${ui.filter==='low'?'selected':''}>Low stock</option><option value="out" ${ui.filter==='out'?'selected':''}>Out of stock</option></select></div>${filtered.length?`<div class="mobile-product-list">${filtered.map((p,i)=>`<article class="mobile-product"><div class="mobile-product-main">${productAvatar(p,i)}<div class="mobile-product-name"><strong>${e(p.name)}</strong><span>${e(p.barcode||p.sku)}</span></div><strong>${money(toPaise(p.price))}</strong></div><div class="mobile-product-foot"><span>${p.stock} ${e(p.unit)} left</span>${productStatus(p)}<button class="btn btn-sm" data-action="stock" data-id="${p.id}">+ Stock</button><button class="btn btn-sm" data-action="edit-product" data-id="${p.id}">Edit</button></div></article>`).join('')}</div><div class="table-scroll inventory-desktop-table"><table class="data-table"><thead><tr><th>Product</th><th>Category</th><th>Selling price</th><th>Stock</th><th>GST</th><th>Status</th><th>Actions</th></tr></thead><tbody>${filtered.map((p,i)=>`<tr><td><div class="product-cell">${productAvatar(p,i)}<div><strong>${e(p.name)}</strong><small>${e(p.sku)}${p.barcode?' · '+e(p.barcode):''}</small></div></div></td><td>${e(p.category||'Uncategorised')}</td><td><strong>${money(toPaise(p.price))}</strong></td><td>${p.stock} ${e(p.unit)}</td><td>${pct(p.gst)}</td><td>${productStatus(p)}</td><td><div class="menu-links"><button class="btn btn-sm" data-action="stock" data-id="${p.id}">+ Stock</button><button class="btn btn-sm" data-action="edit-product" data-id="${p.id}">Edit</button></div></td></tr>`).join('')}</tbody></table></div>`:empty('▤',q||ui.filter!=='all'?'No matching products':'No products yet',q||ui.filter!=='all'?'Try a different search or filter.':'Add your first product to track stock and create invoices.',q?'':'Add product',q?'':'add-product')}<div class="pagination-text">Showing ${filtered.length} of ${db.products.length} products</div></section>`;
 }
 function billingPreview(){try{return calculateInvoice(ui.cart,productsMap(),ui.discount,db.settings,db.customers.find(c=>c.id===ui.billingCustomer)||{state:db.settings.state})}catch{return null}}
 function renderBilling(){
- const q=ui.billingSearch.toLowerCase().trim();const matching=db.products.filter(p=>[p.name,p.sku,p.category].some(x=>String(x).toLowerCase().includes(q)));
+ const q=ui.billingSearch.toLowerCase().trim();const matching=db.products.filter(p=>[p.name,p.sku,p.barcode,p.category].some(x=>String(x||'').toLowerCase().includes(q)));
  const preview=billingPreview();
- return `${sectionHeader('Billing & checkout','Select products, set quantities and create a printable invoice.',`<button class="btn" data-go="sales">Invoice history</button>`)}
- <div class="two-col"><section class="card products-picker"><div class="table-top"><div><strong style="font-size:14px">Select products</strong><div class="mini-note">Click a product to add it to the invoice</div></div></div><div style="padding:13px 17px"><div class="searchbox" style="max-width:none"><input type="search" data-search="billing" value="${e(ui.billingSearch)}" placeholder="Search by name or SKU..." aria-label="Find product"></div></div><div class="picker-list">${matching.length?matching.map((p,i)=>`<button class="picker-product" data-action="add-to-cart" data-id="${p.id}" ${p.stock===0?'disabled':''}>${productAvatar(p,i)}<span class="picker-info"><strong>${e(p.name)}</strong><small>${e(p.sku)} · ${p.stock>0?`${p.stock} in stock`:'Out of stock'}</small></span><span class="picker-price">${money(toPaise(p.price))}</span><span class="picker-add">+</span></button>`).join(''):db.products.length?empty('⌕','No matching products','Try searching with a different keyword.'):empty('▧','No products to bill yet','Add your first product to start billing.','Add product','add-product')}</div></section>
+ return `${sectionHeader('Billing & checkout','Select products, set quantities and create a printable invoice.',`<button class="btn btn-scan" data-action="scan-billing">▣ Scan barcode</button><button class="btn" data-go="sales">Invoice history</button>`)}
+ <div class="two-col"><section class="card products-picker"><div class="table-top"><div><strong style="font-size:14px">Select products</strong><div class="mini-note">Click a product to add it to the invoice</div></div></div><div style="padding:13px 17px"><div class="billing-search-row"><div class="searchbox" style="max-width:none"><input type="search" data-search="billing" value="${e(ui.billingSearch)}" placeholder="Search name, SKU or barcode..." aria-label="Find product"></div><button type="button" class="btn btn-scan mobile-scan-btn" data-action="scan-billing">▣ Scan</button></div></div><div class="picker-list">${matching.length?matching.map((p,i)=>`<button class="picker-product" data-action="add-to-cart" data-id="${p.id}" ${p.stock===0?'disabled':''}>${productAvatar(p,i)}<span class="picker-info"><strong>${e(p.name)}</strong><small>${e(p.sku)} · ${p.stock>0?`${p.stock} in stock`:'Out of stock'}</small></span><span class="picker-price">${money(toPaise(p.price))}</span><span class="picker-add">+</span></button>`).join(''):db.products.length?empty('⌕','No matching products','Try searching with a different keyword.'):empty('▧','No products to bill yet','Add your first product to start billing.','Add product','add-product')}</div></section>
  <section class="card bill-card"><div style="display:flex;justify-content:space-between;gap:12px;align-items:center"><h3>Current invoice</h3><span class="chip grey">${ui.cart.reduce((a,b)=>a+b.qty,0)} items</span></div><div class="field"><label for="billCustomer">Customer</label><select id="billCustomer"><option value="">Walk-in customer</option>${db.customers.map(c=>`<option value="${c.id}" ${ui.billingCustomer===c.id?'selected':''}>${e(c.name)}</option>`).join('')}</select></div><div style="display:flex;justify-content:flex-end;margin-top:6px"><button class="section-link" data-action="add-customer">+ Add customer</button></div>
  <div class="bill-items">${ui.cart.length?ui.cart.map(item=>{const p=db.products.find(p=>p.id===item.productId);if(!p)return '';const line=preview?.lines.find(l=>l.productId===p.id);return `<div class="bill-item"><div><div class="name">${e(p.name)}</div><small>${money(toPaise(p.price))} / ${e(p.unit)}</small><div class="qty-control"><button data-action="decrease-qty" data-id="${p.id}" aria-label="Decrease quantity">−</button><span>${item.qty}</span><button data-action="increase-qty" data-id="${p.id}" aria-label="Increase quantity" ${item.qty>=p.stock?'disabled':''}>+</button></div></div><div><div class="bill-line-total">${money(line?.total ?? toPaise(p.price)*item.qty)}</div><button class="remove-item" data-action="remove-cart" data-id="${p.id}">Remove</button></div></div>`}).join(''):empty('▧','Your cart is empty','Choose a product on the left to begin billing.')}</div>
  <div class="field"><label for="billDiscount">Discount (%)</label><input id="billDiscount" type="number" min="0" max="100" step="0.5" value="${e(ui.discount)}"></div><div class="summary-box"><div class="summary-row"><span>Subtotal ${db.settings.taxMode==='inclusive'?'(incl. GST)':''}</span><b>${money(preview?.list||0)}</b></div><div class="summary-row"><span>Discount</span><b>− ${money(preview?.discount||0)}</b></div><div class="summary-row"><span>GST ${preview?.taxType==='intra'?'(CGST + SGST)':preview?.taxType==='inter'?'(IGST)':''} ${db.settings.taxMode==='inclusive'?'included':''}</span><b>${money(preview?.tax||0)}</b></div><div class="summary-row total"><span>Total</span><b>${money(preview?.total||0)}</b></div></div>
@@ -144,12 +266,12 @@ function renderReports(){const start=reportDateRange(),inv=db.invoices.filter(x=
 }
 function renderSettings(){const s=db.settings;return `${sectionHeader('Store settings','Personalise your invoices and manage your data.')}<div class="settings-grid"><div><section class="card setting-section"><h3>Business details</h3><p>This information appears on every new invoice.</p><form id="settingsForm"><div class="form-grid">${field('Business / shop name','businessName',s.businessName,'text','required maxlength="80"')}${field('Owner / contact name','owner',s.owner,'text','maxlength="80"')}${field('Phone number','phone',s.phone,'tel','maxlength="25"')}${field('Email address','email',s.email,'email','maxlength="100"')}${field('GSTIN (optional)','gstin',s.gstin,'text','maxlength="15" style="text-transform:uppercase"')}<div class="field"><label for="state">Business state / UT</label><select name="state" id="state">${stateOptions(s.state)}</select></div><div class="field full"><label for="address">Business address</label><textarea id="address" name="address" maxlength="240">${e(s.address)}</textarea></div></div><div class="thin-line"></div><h3>Billing preferences</h3><p>Choose how prices are stored. This affects GST calculations on new invoices.</p><div class="form-grid"><div class="field"><label for="invoicePrefix">Invoice prefix</label><input id="invoicePrefix" name="invoicePrefix" value="${e(s.invoicePrefix)}" maxlength="12" required></div><div class="field"><label for="taxMode">Product price includes GST?</label><select id="taxMode" name="taxMode"><option value="exclusive" ${s.taxMode==='exclusive'?'selected':''}>No, add GST</option><option value="inclusive" ${s.taxMode==='inclusive'?'selected':''}>Yes, GST included</option></select></div></div><p class="mini-note">Next invoice: ${e(s.invoicePrefix)}-${String(s.nextInvoice).padStart(4,'0')}. GST rates must be verified for each product.</p><div style="margin-top:22px"><button class="btn btn-primary" type="submit">Save settings</button></div></form></section></div><div><section class="card setting-section"><h3>Data & backup</h3><p>Your store data lives in this browser. It does not automatically sync across devices or to GitHub.</p><div class="help-row"><div class="help-icon">↓</div><div style="flex:1"><b>Download backup</b><p>Save your products, customers, stock movements and invoices as a JSON file.</p><button class="btn btn-sm" style="margin-top:10px" data-action="backup">Download JSON</button></div></div><div class="help-row"><div class="help-icon">↑</div><div style="flex:1"><b>Restore backup</b><p>Replaces the current browser workspace with a backup file.</p><button class="btn btn-sm" style="margin-top:10px" data-action="choose-import">Import JSON</button><input id="importFile" type="file" accept=".json,application/json" hidden></div></div><div class="thin-line"></div><div class="help-row"><div class="help-icon" style="background:#fff1ee;color:#c15a4d">!</div><div style="flex:1"><b>Reset workspace</b><p>Erase this browser's current store data. Export a backup first.</p><button class="btn btn-danger btn-sm" style="margin-top:10px" data-action="reset-data">Clear all data</button></div></div></section><section class="card setting-section" style="margin-top:18px"><h3>Before using real invoices</h3><p>Confirm your GST registration, product HSN/SAC, applicable tax rates, invoice particulars and local compliance requirements with a qualified tax professional. This is a starter billing app, not certified GST software.</p><span class="chip green">✓ No external libraries required</span></section></div></div>`}
 function openModal(type,id=null){ui.modal=type;ui.editId=id;renderModal()}
-function closeModal(){ui.modal=null;ui.editId=null;$('#modalLayer').innerHTML=''}
+function closeModal(){ui.modal=null;ui.editId=null;ui.scanCode='';ui.addAfterScan=false;$('#modalLayer').innerHTML=''}
 function shellModal(title,desc,body,footer='',cls=''){return `<div class="modal-overlay" role="presentation"><div class="modal ${cls}" role="dialog" aria-modal="true" aria-label="${e(title)}"><div class="modal-header"><div><h2>${title}</h2><p>${desc}</p></div><button type="button" class="modal-x" data-action="close-modal" aria-label="Close">×</button></div>${body}${footer?`<div class="modal-footer">${footer}</div>`:''}</div></div>`}
 function renderModal(){let h='';
  if(ui.modal==='product'){
-  const p=db.products.find(x=>x.id===ui.editId)||{};const editing=Boolean(p.id);
-  h=shellModal(editing?'Edit product':'Add a product',editing?'Update product information.':'Enter the details for your new product.',`<form id="productForm"><div class="modal-body"><div class="form-grid">${field('Product name *','name',p.name||'','text','required maxlength="100"')}${field('SKU / item code *','sku',p.sku||'','text','required maxlength="40"')}${field('Category','category',p.category||'','text','maxlength="40"')}${field('Unit','unit',p.unit||'pcs','text','required maxlength="16"')}${field('Selling price (₹) *','price',p.price??'','number','required min="0" step="0.01"')}${field('Purchase cost (₹)','cost',p.cost??'','number','min="0" step="0.01"')}${field('Opening stock','stock',p.stock??0,'number',`required min="0" step="1" ${editing?'readonly title="Use Stock button to update inventory"':''}`)}${field('Low stock alert at','lowStock',p.lowStock??5,'number','required min="0" step="1"')}<div class="field full"><label for="gst">GST rate (%)</label><input id="gst" name="gst" type="number" required min="0" max="100" step="0.01" value="${e(p.gst??18)}"><span class="field-hint">Common rates include 0%, 5%, 18% and 40%. Check the applicable rate for each product.</span></div></div>${editing?`<p class="field-hint" style="margin:13px 0 0">Use “+ Stock” on the inventory page to change stock and record a movement.</p>`:''}</div><div class="modal-footer">${editing?'<button type="button" class="btn btn-danger" data-action="delete-product">Delete product</button>':''}<span style="flex:1"></span><button type="button" class="btn" data-action="close-modal">Cancel</button><button class="btn btn-primary" type="submit">${editing?'Save changes':'Add product'}</button></div></form>`);
+  const p=db.products.find(x=>x.id===ui.editId)||{};const editing=Boolean(p.id);const newCode=editing?(p.barcode||''):ui.scanCode;
+  h=shellModal(editing?'Edit product':'Add a product',editing?'Update product information.':'Enter the details for your new product.',`<form id="productForm"><div class="modal-body"><div class="form-grid">${field('Product name *','name',p.name||'','text','required maxlength="100"')}${field('SKU / item code *','sku',p.sku||(newCode||'').slice(0,40),'text','required maxlength="40"')}${field('Barcode / EAN / UPC','barcode',newCode,'text','maxlength="80" autocomplete="off"')}<div class="field full scan-in-form"><button type="button" class="btn btn-scan" data-action="scan-product-field">▣ Scan barcode with camera</button><span class="field-hint">Barcode identifies the item. Enter its name, prices and GST manually.</span></div>${field('Category','category',p.category||'','text','maxlength="40"')}${field('Unit','unit',p.unit||'pcs','text','required maxlength="16"')}${field('Selling price (₹) *','price',p.price??'','number','required min="0" step="0.01"')}${field('Purchase cost (₹)','cost',p.cost??'','number','min="0" step="0.01"')}${field('Opening stock','stock',p.stock??0,'number',`required min="0" step="1" ${editing?'readonly title="Use Stock button to update inventory"':''}`)}${field('Low stock alert at','lowStock',p.lowStock??5,'number','required min="0" step="1"')}<div class="field full"><label for="gst">GST rate (%)</label><input id="gst" name="gst" type="number" required min="0" max="100" step="0.01" value="${e(p.gst??18)}"><span class="field-hint">Common rates include 0%, 5%, 18% and 40%. Check the applicable rate for each product.</span></div></div>${editing?`<p class="field-hint" style="margin:13px 0 0">Use “+ Stock” on the inventory page to change stock and record a movement.</p>`:''}</div><div class="modal-footer">${editing?'<button type="button" class="btn btn-danger" data-action="delete-product">Delete product</button>':''}<span style="flex:1"></span><button type="button" class="btn" data-action="close-modal">Cancel</button><button class="btn btn-primary" type="submit">${editing?'Save changes':'Add product'}</button></div></form>`);
  }
  if(ui.modal==='customer'){
  const c=db.customers.find(x=>x.id===ui.editId)||{};const editing=Boolean(c.id);
@@ -171,7 +293,7 @@ function invoicePaper(inv){const b=inv.business||db.settings,c=inv.customer||{};
  return `<article class="invoice-paper printable-invoice"><div class="invoice-head"><div><div class="invoice-business">${e(b.businessName||'My Store')}</div>${b.owner?`<p>${e(b.owner)}</p>`:''}${b.address?`<p>${e(b.address)}</p>`:''}${b.state?`<p>${e(b.state)}</p>`:''}<p>${[b.phone,b.email].filter(Boolean).map(e).join(' · ')}</p>${b.gstin?`<p><b>GSTIN:</b> ${e(b.gstin)}</p>`:''}</div><div><div class="invoice-title">INVOICE</div><p style="text-align:right"><b>${e(inv.number)}</b></p>${inv.demo?'<span class="chip yellow">SAMPLE · NOT FOR USE</span>':''}</div></div><div class="invoice-meta"><div><b>BILL TO</b><p><strong>${e(c.name||'Walk-in customer')}</strong></p>${c.address?`<p>${e(c.address)}</p>`:''}${c.state?`<p>${e(c.state)}</p>`:''}${c.phone?`<p>${e(c.phone)}</p>`:''}${c.gstin?`<p>GSTIN: ${e(c.gstin)}</p>`:''}</div><div style="text-align:right"><b>INVOICE DETAILS</b><p>Date: ${formatDate(inv.date)}</p><p>Payment: ${e(inv.payment)}</p><p>Status: ${inv.paid?'Paid':'Unpaid'}</p></div></div><div class="table-scroll"><table class="invoice-print-table"><thead><tr><th>Item</th><th>Qty</th><th>Rate</th><th>GST</th><th style="text-align:right">Amount</th></tr></thead><tbody>${inv.lines.map(x=>`<tr><td>${e(x.name)}<div style="font-size:10px;color:#8a99a6">${e(x.sku||'')}</div></td><td>${x.qty} ${e(x.unit)}</td><td>${money(x.unitPrice)}</td><td>${pct(x.gst)}</td><td style="text-align:right">${money(x.total)}</td></tr>`).join('')}</tbody></table></div><div class="invoice-total"><div class="summary-row"><span>Items subtotal ${inv.inclusive?'(incl. GST)':''}</span><b>${money(inv.list)}</b></div>${inv.discount?`<div class="summary-row"><span>Discount (${inv.discountPercent}%)</span><b>− ${money(inv.discount)}</b></div>`:''}<div class="summary-row"><span>Taxable amount</span><b>${money(inv.taxable)}</b></div>${taxLines}<div class="summary-row total"><span>Total</span><b>${money(inv.total)}</b></div></div>${inv.notes?`<p><strong>Note:</strong> ${e(inv.notes)}</p>`:''}<div class="invoice-footer">Thank you for your business!<div style="font-size:9px;margin-top:5px">Invoice generated with BillNest</div></div></article>`;
 }
 function downloadFile(name,content,mime){const blob=new Blob([content],{type:mime}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),10000)}
-function exportProducts(){const rows=[['SKU','Product','Category','Unit','Selling price INR','Purchase cost INR','Stock','Low stock level','GST percent']];db.products.forEach(p=>rows.push([p.sku,p.name,p.category,p.unit,p.price,p.cost,p.stock,p.lowStock,p.gst]));downloadFile(`billnest-products-${today()}.csv`,'\ufeff'+csvEncode(rows),'text/csv;charset=utf-8')}
+function exportProducts(){const rows=[['SKU','Product','Category','Unit','Selling price INR','Purchase cost INR','Stock','Low stock level','GST percent','Barcode']];db.products.forEach(p=>rows.push([p.sku,p.name,p.category,p.unit,p.price,p.cost,p.stock,p.lowStock,p.gst,p.barcode||'']));downloadFile(`billnest-products-${today()}.csv`,'\ufeff'+csvEncode(rows),'text/csv;charset=utf-8')}
 function exportInvoices(){const rows=[['Invoice','Date','Customer','Payment','Payment status','Taxable INR','GST INR','Total INR','Number of items']];db.invoices.forEach(i=>rows.push([i.number,i.date,i.customer?.name||'Walk-in customer',i.payment,i.paid?'Paid':'Unpaid',rupees(i.taxable).toFixed(2),rupees(i.tax).toFixed(2),rupees(i.total).toFixed(2),i.lines.reduce((s,l)=>s+l.qty,0)]));downloadFile(`billnest-invoices-${today()}.csv`,'\ufeff'+csvEncode(rows),'text/csv;charset=utf-8')}
 function saveInvoice(){
  if(!ui.cart.length)return toast('Add at least one product.','error');
@@ -185,7 +307,13 @@ function saveInvoice(){
  ui.cart=[];ui.discount=0;ui.billingSearch='';ui.billNotes='';ui.invoiceId=invoice.id;ui.modal='invoice';render();toast(`Invoice ${invoice.number} saved. Stock updated.`)
 }
 function handleAction(action,id){switch(action){
- case 'add-product':ui.editId=null;openModal('product');break;
+ case 'add-product':ui.scanCode='';ui.addAfterScan=false;ui.editId=null;openModal('product');break;
+ case 'scan-inventory':openScanner('inventory');break;
+ case 'scan-billing':openScanner('billing');break;
+ case 'scan-product-field':openScanner('product');break;
+ case 'close-scanner':stopScanner();break;
+ case 'scanner-retry':stopScanner();openScanner(scanner.mode);break;
+ case 'scanner-torch':toggleScannerTorch();break;
  case 'edit-product':openModal('product',id);break;
  case 'delete-product':{
   const p=db.products.find(x=>x.id===ui.editId);if(!p)return;
@@ -218,15 +346,17 @@ function handleAction(action,id){switch(action){
 function validateNonnegative(n,name,integer=false){if(!Number.isFinite(n)||n<0||integer&&!Number.isInteger(n))throw Error('Enter a valid '+name+'.')}
 function handleForm(form){const data=Object.fromEntries(new FormData(form));try{
  if(form.id==='productForm'){
-  const name=data.name.trim(),sku=data.sku.trim().toUpperCase(),price=Number(data.price),cost=data.cost===''?0:Number(data.cost),stock=Number(data.stock),lowStock=Number(data.lowStock);
+  const name=data.name.trim(),sku=data.sku.trim().toUpperCase(),barcode=cleanBarcode(data.barcode),price=Number(data.price),cost=data.cost===''?0:Number(data.cost),stock=Number(data.stock),lowStock=Number(data.lowStock);
   if(!name||!sku)throw Error('Product name and SKU are required.');
   validateNonnegative(price,'selling price');validateNonnegative(cost,'purchase cost');validateNonnegative(stock,'stock',true);validateNonnegative(lowStock,'low stock level',true);if(data.gst===""||!Number.isFinite(Number(data.gst))||Number(data.gst)<0||Number(data.gst)>100)throw Error("Enter a valid GST rate between 0 and 100%.");
   if(db.products.some(p=>p.sku.toLowerCase()===sku.toLowerCase()&&p.id!==ui.editId))throw Error('Another product already has that SKU.');
-  const attrs={name,sku,category:data.category.trim(),unit:data.unit.trim()||'pcs',price,cost,lowStock,gst:Number(data.gst)};
+  if(barcode&&db.products.some(p=>p.id!==ui.editId&&[p.barcode,p.sku].some(code=>String(code||'').toLowerCase()===barcode.toLowerCase())))throw Error('This barcode is already assigned to another product.');
+  const attrs={name,sku,barcode,category:data.category.trim(),unit:data.unit.trim()||'pcs',price,cost,lowStock,gst:Number(data.gst)};
   const old=db.products.find(p=>p.id===ui.editId);
   if(old)Object.assign(old,attrs);
   else db.products.push({id:uid(),...attrs,stock,createdAt:new Date().toISOString()});
-  save();closeModal();render();toast(old?'Product updated.':'Product added to inventory.');
+  const addToBill=ui.addAfterScan&&!old;const productId=old?.id||db.products.at(-1).id;
+  if(!save())return;closeModal();if(addToBill){navigate('billing');const added=db.products.find(p=>p.id===productId);if(added?.stock>0)ui.cart.push({productId,qty:1});render();toast(added?.stock>0?'Product created and added to bill.':'Product saved. Add stock before billing.')}else{render();toast(old?'Product updated.':'Product added to inventory.')}
  }
  if(form.id==='customerForm'){
   const name=data.name.trim();if(!name)throw Error('Customer name is required.');
@@ -264,7 +394,7 @@ document.addEventListener('click',event=>{
  const go=event.target.closest('[data-go]');if(go){navigate(go.dataset.go);return}
  const action=event.target.closest('[data-action]');if(action&&action.dataset.action!=='overlay-close'){event.preventDefault();handleAction(action.dataset.action,action.dataset.id);return}
 });
-document.addEventListener('submit',event=>{if(event.target.matches('#productForm,#customerForm,#stockForm,#settingsForm')){event.preventDefault();handleForm(event.target)}});
+document.addEventListener('submit',event=>{if(event.target.matches('#scanManualForm')){event.preventDefault();barcodeFound(new FormData(event.target).get('barcode'),true);return}if(event.target.matches('#productForm,#customerForm,#stockForm,#settingsForm')){event.preventDefault();handleForm(event.target)}});
 document.addEventListener('input',event=>{
  const input=event.target;
  if(input.dataset.search){const key=input.dataset.search;const map={inventory:'search',billing:'billingSearch',sales:'salesSearch',customers:'customerSearch'};ui[map[key]]=input.value;rerenderKeepFocus(`[data-search="${key}"]`);}
@@ -279,8 +409,10 @@ document.addEventListener('change',event=>{
  if(t.id==='reportRange'){ui.reportRange=t.value;render()}
  if(t.id==='importFile')importBackup(t.files?.[0]);
 });
-document.addEventListener('keydown',event=>{if(event.key==='Escape'&&ui.modal)closeModal();if((event.ctrlKey||event.metaKey)&&event.key==='k'){event.preventDefault();navigate('inventory');$('[data-search="inventory"]')?.focus()}});
+document.addEventListener('keydown',event=>{if(event.key==='Escape'&&scanner.open){stopScanner();return}if(event.key==='Escape'&&ui.modal)closeModal();if((event.ctrlKey||event.metaKey)&&event.key==='k'){event.preventDefault();navigate('inventory');$('[data-search="inventory"]')?.focus()}});
 $('#menuToggle').addEventListener('click',()=>{$('.sidebar').classList.toggle('open');let b=$('#backdrop');if(!b){b=document.createElement('div');b.id='backdrop';b.className='mobile-backdrop';document.body.appendChild(b);b.addEventListener('click',()=>{$('.sidebar').classList.remove('open');b.classList.remove('show')})}b.classList.toggle('show', $('.sidebar').classList.contains('open'))});
 window.addEventListener('afterprint',()=>{$('#printLayer').innerHTML=''});
+document.addEventListener('visibilitychange',()=>{if(document.hidden&&scanner.open)stopScanner()});
+window.addEventListener('pagehide',()=>{if(scanner.open)stopScanner()});
 window.addEventListener('error',event=>{console.error('BillNest application error',event.error||event.message)});
 render();
