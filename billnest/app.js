@@ -36,8 +36,14 @@ const matchBarcode = code => {
  const normalized=cleanBarcode(code).toLowerCase();
  return normalized ? db.products.find(p=>[p.barcode,p.sku].some(value=>String(value||'').trim().toLowerCase()===normalized)) : undefined;
 };
+// The camera API can only request capabilities. Minimum physical focus distance
+// depends on the phone and which rear lens it exposes to the browser.
 const SCANNABLE_FORMATS = ['ean_13','ean_8','upc_a','upc_e','code_128','code_39','code_93','itf','codabar','qr_code','data_matrix'];
-const scanner = {open:false,mode:'billing',session:0,stream:null,controls:null,timer:null,engineTimer:null,busy:false,last:'',lastSeenAt:0,engine:'',facing:'environment',torch:false,switching:false};
+const scanner = {
+ open:false,mode:'billing',session:0,stream:null,controls:null,timer:null,engineTimer:null,
+ busy:false,last:'',lastSeenAt:0,engine:'',facing:'environment',torch:false,switching:false,
+ deviceId:'',cameras:[],zoom:1,zoomRange:null,misses:0,cropCanvas:null
+};
 const scannerStatus = (message,type='info') => {const el=$('#scannerStatus');if(el){el.textContent=message;el.dataset.state=type}};
 function releaseScannerCamera(){
  scanner.session++;
@@ -46,7 +52,7 @@ function releaseScannerCamera(){
  try{scanner.controls?.stop?.()}catch(err){console.warn('Scanner stop:',err)}scanner.controls=null;
  scanner.stream?.getTracks?.().forEach(track=>track.stop());scanner.stream=null;
  const vid=$('#scannerVideo');if(vid){try{vid.pause?.()}catch{}vid.srcObject=null}
- scanner.engine='';scanner.torch=false;
+ scanner.engine='';scanner.torch=false;scanner.zoomRange=null;scanner.misses=0;scanner.cropCanvas=null;
 }
 function stopScanner(){
  scanner.open=false;releaseScannerCamera();
@@ -55,12 +61,23 @@ function stopScanner(){
 }
 function scannerMarkup(mode){
  const title=mode==='inventory'?'Scan to find or add stock':mode==='product'?'Scan product barcode':'Scan items for billing';
- const desc=mode==='billing'?'Scan a product to add one unit to your bill.':mode==='inventory'?'Existing barcodes open products. Unknown codes start a new product.':'The scanned code will fill the barcode field.';
- return `<div class="scanner-overlay" role="dialog" aria-modal="true" aria-label="Barcode scanner"><div class="scanner-panel"><div class="scanner-top"><div><span class="scanner-eyebrow">BILLNEST SCANNER</span><h2>${title}</h2><p>${desc}</p></div><button type="button" class="scanner-close" data-action="close-scanner" aria-label="Close scanner">×</button></div><div class="scanner-preview"><video id="scannerVideo" muted playsinline autoplay aria-label="Live barcode camera preview"></video><div class="scanner-guide" aria-hidden="true"><span></span></div><span class="scanner-camera-label">Keep the lines sharp and fully inside the frame</span></div><p id="scannerStatus" class="scanner-status" role="status" aria-live="polite">Opening rear camera…</p><div class="scanner-actions"><button type="button" class="btn" data-action="scanner-switch">↻ Switch camera</button><button type="button" class="btn" data-action="scanner-torch" id="scannerTorch" hidden>⚡ Flashlight</button><button type="button" class="btn" data-action="scanner-retry">Retry</button></div><label class="scanner-photo-button" for="barcodePhoto">📷 Scan from photo / camera</label><input class="scanner-photo-input" id="barcodePhoto" type="file" accept="image/*" aria-label="Scan barcode from a photo or camera"><p class="scanner-photo-hint">Not detecting? Try better light, hold the phone 15–25 cm away, or take a clear photo.</p><form id="scanManualForm" class="scanner-manual-form"><label for="manualBarcode">Enter the barcode manually</label><div class="scanner-manual-row"><input id="manualBarcode" name="barcode" placeholder="EAN, UPC, barcode or SKU" autocomplete="off" autocapitalize="off" inputmode="text" maxlength="80" required><button class="btn btn-primary" type="submit">Use code</button></div></form><p class="scanner-hint">Camera requires HTTPS and permission. Video stays on your device. Scan a known barcode or enter new product details manually.</p></div></div>`;
+ const desc=mode==='billing'?'Scan an item to add one unit to the bill.':mode==='inventory'?'Known codes open products. Unknown codes start a new product.':'Scanning fills the product barcode field.';
+ return `<div class="scanner-overlay" role="dialog" aria-modal="true" aria-label="Barcode scanner"><div class="scanner-panel">
+ <div class="scanner-top"><div><span class="scanner-eyebrow">BILLNEST SCANNER</span><h2>${title}</h2><p>${desc}</p></div><button type="button" class="scanner-close" data-action="close-scanner" aria-label="Close scanner">×</button></div>
+ <div class="scanner-distance"><strong>10–20 cm close-range mode</strong><span>Keep all black bars sharp, with space at both ends</span></div>
+ <div class="scanner-preview"><video id="scannerVideo" muted playsinline autoplay aria-label="Live barcode camera preview"></video><div class="scanner-guide" aria-hidden="true"><span></span></div><span class="scanner-camera-label">Hold still • Keep the complete barcode in view</span></div>
+ <p id="scannerStatus" class="scanner-status" role="status" aria-live="polite">Opening rear camera…</p>
+ <div class="scanner-optics"><div id="scannerCameraWrap" class="scanner-camera-pick" hidden><label for="scannerCamera">Camera lens (choose Macro for close labels)</label><select id="scannerCamera" aria-label="Choose camera lens"></select></div><div id="scannerZoomWrap" class="scanner-zoom" hidden><div><label for="scannerZoom">Zoom</label><output id="scannerZoomValue" for="scannerZoom">1.0×</output></div><input id="scannerZoom" type="range" min="1" max="2" step="0.1" value="1" aria-label="Camera optical or digital zoom"></div></div>
+ <div class="scanner-actions"><button type="button" class="btn" data-action="scanner-focus">◎ Refocus</button><button type="button" class="btn" data-action="scanner-switch">↻ Switch</button><button type="button" class="btn" data-action="scanner-torch" id="scannerTorch" hidden>⚡ Light</button><button type="button" class="btn" data-action="scanner-retry">Retry</button></div>
+ <label class="scanner-photo-button" for="barcodePhoto">📷 Scan from photo / camera</label><input class="scanner-photo-input" id="barcodePhoto" type="file" accept="image/*" aria-label="Scan barcode from a photo or camera">
+ <p class="scanner-photo-hint">If live scanning stays blurry at 10–20 cm, select the Macro lens if available, or use your working photo scanner. Some phone cameras cannot focus this close in a browser.</p>
+ <form id="scanManualForm" class="scanner-manual-form"><label for="manualBarcode">Enter the barcode manually</label><div class="scanner-manual-row"><input id="manualBarcode" name="barcode" placeholder="EAN, UPC, barcode or SKU" autocomplete="off" autocapitalize="off" inputmode="text" maxlength="80" required><button class="btn btn-primary" type="submit">Use code</button></div></form>
+ <p class="scanner-hint">HTTPS and camera permission are required. Your camera video is not uploaded. Barcode prices and product details come from your own inventory.</p>
+ </div></div>`;
 }
 function openScanner(mode='billing'){
  if(scanner.open)stopScanner();
- scanner.open=true;scanner.mode=mode;scanner.last='';scanner.lastSeenAt=0;scanner.facing='environment';
+ scanner.open=true;scanner.mode=mode;scanner.last='';scanner.lastSeenAt=0;scanner.facing='environment';scanner.deviceId='';scanner.zoom=1;
  $('#scannerLayer').innerHTML=scannerMarkup(mode);
  document.body.classList.add('scanner-open');
  startScannerCamera();
@@ -69,7 +86,7 @@ function barcodeFound(raw,explicit=false){
  if(!scanner.open)return;
  const code=cleanBarcode(raw);if(!code)return;
  const when=Date.now();
- // Hold-to-scan must not add the same product repeatedly every few frames.
+ // Do not bill the same visible barcode on every video frame.
  if(!explicit&&code===scanner.last&&when-scanner.lastSeenAt<2200){scanner.lastSeenAt=when;return}
  scanner.last=code;scanner.lastSeenAt=when;
  if(scanner.mode==='product'){
@@ -85,7 +102,7 @@ function barcodeFound(raw,explicit=false){
   const current=ui.cart.find(line=>line.productId===product.id);
   if(product.stock<=0||(current&&current.qty>=product.stock)){scannerStatus(`${product.name} has no more available stock.`,'error');return}
   if(current)current.qty++;else ui.cart.push({productId:product.id,qty:1});
-  scannerStatus(`✓ ${product.name} added to bill. Scan another item.`,'success');
+  scannerStatus(`✓ ${product.name} added to bill. Move the barcode away before scanning it again.`,'success');
   if(navigator.vibrate)navigator.vibrate(65);
   render();return;
  }
@@ -115,126 +132,207 @@ function loadBarcodeLibrary(){
  return fallbackLoader;
 }
 function scannerCameraTrack(){return scanner.stream?.getVideoTracks?.()[0]||$('#scannerVideo')?.srcObject?.getVideoTracks?.()[0]||null}
-function configureScannerTrack(){
- const track=scannerCameraTrack();
- if(!track)return;
- const caps=track.getCapabilities?.()||{};
+function scannerCameraConstraints(){
+ return {audio:false,video:{...(scanner.deviceId?{deviceId:{exact:scanner.deviceId}}:{facingMode:{ideal:scanner.facing}}),width:{ideal:1920},height:{ideal:1080},frameRate:{ideal:30,max:30}}};
+}
+async function configureScannerTrack(){
+ const track=scannerCameraTrack();if(!track)return;
+ let caps={};try{caps=track.getCapabilities?.()||{}}catch{}
  const torchButton=$('#scannerTorch');if(torchButton)torchButton.hidden=!caps.torch;
- // Some mobile browsers support autofocus and help considerably with small EAN/UPC codes.
- if(Array.isArray(caps.focusMode)&&caps.focusMode.includes('continuous')){
-  track.applyConstraints?.({advanced:[{focusMode:'continuous'}]}).catch(()=>{});
+ // Only request supported focusing features. Never let an unsupported constraint
+ // prevent the basic camera stream from working.
+ const focusModes=Array.isArray(caps.focusMode)?caps.focusMode:[];
+ if(focusModes.includes('continuous')){
+  try{await track.applyConstraints?.({advanced:[{focusMode:'continuous'}]})}catch(err){console.info('Continuous autofocus unavailable:',err)}
  }
+ const zoomWrap=$('#scannerZoomWrap'),slider=$('#scannerZoom'),output=$('#scannerZoomValue');
+ const zoom=caps.zoom;
+ if(zoomWrap&&slider&&zoom&&Number.isFinite(zoom.min)&&Number.isFinite(zoom.max)&&zoom.max>zoom.min){
+  scanner.zoomRange={min:zoom.min,max:zoom.max};
+  slider.min=String(zoom.min);slider.max=String(Math.min(zoom.max,5));
+  slider.step=String(Number.isFinite(zoom.step)&&zoom.step>0?zoom.step:0.1);
+  scanner.zoom=Math.max(zoom.min,Math.min(Math.min(zoom.max,5),scanner.zoom));
+  slider.value=String(scanner.zoom);
+  if(output)output.textContent=scanner.zoom.toFixed(1)+'×';
+  zoomWrap.hidden=false;
+ }else if(zoomWrap){zoomWrap.hidden=true;scanner.zoomRange=null}
+ const settings=track.getSettings?.()||{};
+ const video=$('#scannerVideo');
+ if(video&&settings.width&&settings.height)video.dataset.resolution=`${settings.width}×${settings.height}`;
+}
+async function listScannerCameras(session){
+ if(!scanner.open||session!==scanner.session||!navigator.mediaDevices?.enumerateDevices)return;
+ try{
+  const devices=(await navigator.mediaDevices.enumerateDevices()).filter(x=>x.kind==='videoinput');
+  if(!scanner.open||session!==scanner.session)return;
+  scanner.cameras=devices;
+  const select=$('#scannerCamera'),wrap=$('#scannerCameraWrap');
+  if(!select||!wrap)return;
+  wrap.hidden=devices.length<2;
+  select.innerHTML='<option value="">Auto rear camera</option>'+devices.map((d,i)=>{
+   const hint=/macro|close|ultra.?wide/i.test(d.label)?' ✦ close focus':'';
+   return `<option value="${e(d.deviceId)}">${e(d.label||'Camera '+(i+1))}${hint}</option>`;
+  }).join('');
+  select.value=scanner.deviceId||'';
+ }catch(err){console.info('Could not list camera lenses:',err)}
+}
+async function applyScannerZoom(value){
+ const track=scannerCameraTrack(),range=scanner.zoomRange;
+ if(!track?.applyConstraints||!range)return;
+ const requested=Number(value);
+ if(!Number.isFinite(requested))return;
+ const next=Math.max(range.min,Math.min(range.max,requested));
+ try{
+  await track.applyConstraints({advanced:[{zoom:next}]});
+  scanner.zoom=next;
+  const output=$('#scannerZoomValue');if(output)output.textContent=next.toFixed(1)+'×';
+ }catch{scannerStatus('Zoom is unavailable on this camera lens. Try Macro or Refocus.','error')}
+}
+async function refocusScanner(){
+ const track=scannerCameraTrack();if(!track?.applyConstraints)return scannerStatus('Automatic focus is controlled by your phone. Try the Macro lens or photo scanner.');
+ let modes=[];try{modes=track.getCapabilities?.()?.focusMode||[]}catch{}
+ try{
+  if(modes.includes('single-shot'))await track.applyConstraints({advanced:[{focusMode:'single-shot'}]});
+  if(modes.includes('continuous'))await track.applyConstraints({advanced:[{focusMode:'continuous'}]});
+  scannerStatus(modes.length?'Refocusing. Hold the barcode at 10–20 cm until the lines are sharp.':'This camera does not expose manual focus. Select Macro if available.');
+ }catch{scannerStatus('Focus is controlled by the device. Try a different rear camera or photo scanning.','error')}
 }
 async function getNativeDetector(){
  if(typeof globalThis.BarcodeDetector!=='function')return null;
  try{
   const supported=await globalThis.BarcodeDetector.getSupportedFormats?.();
   const formats=Array.isArray(supported)?SCANNABLE_FORMATS.filter(x=>supported.includes(x)):SCANNABLE_FORMATS;
-  // A detector supporting only QR codes must not prevent EAN / UPC / Code-128 scans.
   const supports1D=formats.some(x=>['ean_13','ean_8','upc_a','upc_e','code_128','code_39','itf'].includes(x));
   if(!supports1D)return null;
   return new globalThis.BarcodeDetector({formats});
- }catch(err){console.info('Native decoder unavailable:',err);return null}
+ }catch(err){console.info('Native barcode decoder unavailable:',err);return null}
+}
+function nativeBarcodeCrop(video){
+ // Native API can examine a high-resolution central strip, not just a
+ // downscaled full video frame. Preserve both quiet zones around the bars.
+ const w=video.videoWidth||0,h=video.videoHeight||0;
+ if(w<320||h<240||!document.createElement)return null;
+ const canvas=scanner.cropCanvas||(scanner.cropCanvas=document.createElement('canvas'));
+ const cropW=Math.round(w*.92),cropH=Math.round(h*.64);
+ canvas.width=cropW;canvas.height=cropH;
+ const ctx=canvas.getContext('2d',{willReadFrequently:true});
+ if(!ctx)return null;
+ ctx.drawImage(video,Math.round((w-cropW)/2),Math.round((h-cropH)/2),cropW,cropH,0,0,cropW,cropH);
+ return canvas;
 }
 async function useFallbackScanner(nativeSession){
  if(!scanner.open||scanner.session!==nativeSession||scanner.engine!=='native'||scanner.switching)return;
  scanner.switching=true;
- scannerStatus('Improving recognition… Loading another barcode reader.');
+ scannerStatus('Trying enhanced live recognition without restarting your camera…');
  let zxing;
  try{zxing=await loadBarcodeLibrary()}
  catch(err){
-  if(scanner.open&&scanner.session===nativeSession){scanner.switching=false;scannerStatus('Still scanning with the camera. Move closer, improve lighting or use a photo. Extra decoder unavailable.','error')}
+  if(scanner.open&&scanner.session===nativeSession){scanner.switching=false;scannerStatus('Live scanning continues. Enhanced scanner could not load; use the working photo scanner if needed.','error')}
   return;
  }
  if(!scanner.open||scanner.session!==nativeSession)return;
- releaseScannerCamera();
- scannerStatus('Switching to enhanced barcode recognition…');
- startZXingScanner(zxing,scanner.session);
+ // Critically, do NOT stop the stream or reset continuous autofocus here.
+ clearTimeout(scanner.timer);clearTimeout(scanner.engineTimer);scanner.timer=null;scanner.engineTimer=null;
+ scanner.engine='zxing';scanner.switching=false;
+ await startZXingScanner(zxing,nativeSession);
 }
 async function startZXingScanner(zxing,session){
  if(!scanner.open||scanner.session!==session)return;
  scanner.engine='zxing';
  const video=$('#scannerVideo');
  try{
-  const reader=new zxing.BrowserMultiFormatReader(undefined,{delayBetweenScanAttempts:180,delayBetweenScanSuccess:300});
-  const constraints={audio:false,video:{facingMode:{ideal:scanner.facing},width:{ideal:1280},height:{ideal:720}}};
+  const reader=new zxing.BrowserMultiFormatReader(undefined,{delayBetweenScanAttempts:160,delayBetweenScanSuccess:400});
   const callback=(result,error,controls)=>{
    if(!scanner.open||scanner.session!==session)return;
    if(controls&&!scanner.controls)scanner.controls=controls;
    if(result)barcodeFound(result.getText());
   };
   let controls;
-  if(typeof reader.decodeFromConstraints==='function'){
-   // Important: decodeFromVideoDevice(undefined) commonly chooses the front camera.
-   controls=await reader.decodeFromConstraints(constraints,video,callback);
+  // Reuse the existing high-resolution video stream, including focus and zoom.
+  if(typeof reader.decodeFromStream==='function'&&scanner.stream){
+   controls=await reader.decodeFromStream(scanner.stream,video,callback);
   }else{
-   const devices=await zxing.BrowserMultiFormatReader.listVideoInputDevices?.()||[];
-   const rear=devices.find(d=>/back|rear|environment|main|world/i.test(d.label));
-   controls=await reader.decodeFromVideoDevice(rear?.deviceId,video,callback);
+   // Older ZXing builds: release the stream only if this compatibility path is required.
+   releaseScannerCamera();session=scanner.session;scanner.engine='zxing';
+   controls=await reader.decodeFromConstraints(scannerCameraConstraints(),video,callback);
   }
   if(!scanner.open||scanner.session!==session){controls?.stop?.();return}
   scanner.controls=controls;
-  scanner.stream=video.srcObject||null;
-  configureScannerTrack();
-  scannerStatus('Enhanced scanner ready. Hold the barcode steady, with all bars visible.');
+  scanner.stream=video.srcObject||scanner.stream;
+  await configureScannerTrack();
+  scannerStatus('Close-range reader ready. Keep the whole barcode sharp at 10–20 cm.');
  }catch(err){
   if(!scanner.open||scanner.session!==session)return;
-  console.warn('Enhanced scanner failed:',err);
-  scannerStatus(`Enhanced camera failed: ${err.message||'camera access problem'}. Try Retry, photo or manual entry.`,'error');
+  console.warn('Enhanced barcode scanner failed:',err);
+  scannerStatus(`Live reader failed: ${err.message||'camera error'}. You can still use Scan from photo.`,'error');
  }
 }
 async function startScannerCamera(){
  if(!scanner.open)return;
  releaseScannerCamera();
  const session=scanner.session;
- scannerStatus('Opening '+(scanner.facing==='environment'?'rear':'front')+' camera…');
+ scannerStatus('Opening high-resolution '+(scanner.facing==='environment'?'rear':'front')+' camera…');
  const video=$('#scannerVideo');
  if(!globalThis.isSecureContext||!navigator.mediaDevices?.getUserMedia){
-  scannerStatus('Live camera needs an HTTPS address and camera permission. Use the published website, a photo, or manual entry.','error');return;
+  scannerStatus('Live camera requires HTTPS and permission. Photo scanning remains available.','error');return;
  }
  try{
-  const detector=await getNativeDetector();
-  if(!scanner.open||session!==scanner.session)return;
-  if(!detector){
-   scannerStatus('Loading barcode decoder for this browser…');
-   const zxing=await loadBarcodeLibrary();
-   if(!scanner.open||session!==scanner.session)return;
-   await startZXingScanner(zxing,session);return;
+  let stream;
+  try{stream=await navigator.mediaDevices.getUserMedia(scannerCameraConstraints())}
+  catch(err){
+   // A restricted camera can reject 1080p / 30fps or a previously selected device.
+   if(err.name!=='OverconstrainedError'&&err.name!=='NotFoundError')throw err;
+   scanner.deviceId='';
+   stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:scanner.facing},width:{ideal:1280},height:{ideal:720}}});
   }
-  const stream=await navigator.mediaDevices.getUserMedia({audio:false,video:{facingMode:{ideal:scanner.facing},width:{ideal:1280},height:{ideal:720}}});
   if(!scanner.open||session!==scanner.session){stream.getTracks().forEach(t=>t.stop());return}
   scanner.stream=stream;video.srcObject=stream;
   await video.play();
   if(!scanner.open||session!==scanner.session)return;
-  scanner.engine='native';configureScannerTrack();
-  scannerStatus('Camera ready. Align the complete barcode inside the frame.');
-  // Native BarcodeDetector is unreliable for some retail labels. Escalate after 5s.
-  scanner.engineTimer=setTimeout(()=>useFallbackScanner(session),5000);
-  let detectionErrors=0;
+  await configureScannerTrack();
+  listScannerCameras(session);
+  scannerStatus('Camera ready. Focus on the bars at 10–20 cm. Use Macro if your phone offers it.');
+  const detector=await getNativeDetector();
+  if(!scanner.open||session!==scanner.session)return;
+  if(!detector){
+   scannerStatus('Loading enhanced barcode reader… Keep the camera steady.');
+   const zxing=await loadBarcodeLibrary();
+   if(!scanner.open||session!==scanner.session)return;
+   await startZXingScanner(zxing,session);return;
+  }
+  scanner.engine='native';
+  // Fast escalation, but retain the same autofocus/stream if another decoder is needed.
+  scanner.engineTimer=setTimeout(()=>useFallbackScanner(session),3300);
   const tick=async()=>{
    if(!scanner.open||scanner.session!==session||scanner.engine!=='native')return;
    if(!scanner.busy&&video.readyState>=2){
     scanner.busy=true;
     try{
-     const found=await detector.detect(video);
-     if(found?.length&&scanner.session===session){barcodeFound(found[0].rawValue);detectionErrors=0}
+     let found=await detector.detect(video);
+     if(!found?.length&&scanner.misses%2===1){
+      const crop=nativeBarcodeCrop(video);
+      if(crop)found=await detector.detect(crop);
+     }
+     scanner.misses++;
+     if(found?.length&&scanner.session===session){barcodeFound(found[0].rawValue);scanner.misses=0;clearTimeout(scanner.engineTimer);scanner.engineTimer=setTimeout(()=>useFallbackScanner(session),3500)}
     }catch(err){
-     if(++detectionErrors===3)useFallbackScanner(session);
+     if(++scanner.misses>=4)useFallbackScanner(session);
     }finally{scanner.busy=false}
    }
-   if(scanner.open&&scanner.session===session&&scanner.engine==='native')scanner.timer=setTimeout(tick,190);
+   if(scanner.open&&scanner.session===session&&scanner.engine==='native')scanner.timer=setTimeout(tick,160);
   };
   tick();
  }catch(err){
   if(session!==scanner.session||!scanner.open)return;
-  console.warn('Scanner camera unavailable:',err);
+  console.warn('Barcode camera unavailable:',err);
   scanner.stream?.getTracks?.().forEach(track=>track.stop());scanner.stream=null;
-  scannerStatus(err?.name==='NotAllowedError'?'Camera access denied. Allow the camera in browser site settings, then tap Retry.':err?.name==='NotFoundError'?'No camera was found. Try photo or manual entry.':err?.name==='NotReadableError'?'Camera is being used by another app. Close it and tap Retry.':`Camera could not start: ${err.message||'retry or use a photo'}`,'error');
+  scannerStatus(err?.name==='NotAllowedError'?'Camera permission denied. Allow camera access in site settings and Retry.':err?.name==='NotReadableError'?'Camera is busy in another app. Close it and Retry.':`Live camera unavailable: ${err.message||'try the photo scanner'}`,'error');
  }
 }
-async function retryScannerCamera(facing){
+async function retryScannerCamera(facing,deviceId){
  if(!scanner.open)return;
- if(facing)scanner.facing=facing;
+ if(facing){scanner.facing=facing;scanner.deviceId=''}
+ if(deviceId!==undefined)scanner.deviceId=deviceId;
  await startScannerCamera();
 }
 async function scanBarcodeImage(file){
@@ -386,6 +484,7 @@ function handleAction(action,id){switch(action){
  case 'scanner-retry':retryScannerCamera();break;
  case 'scanner-switch':retryScannerCamera(scanner.facing==='environment'?'user':'environment');break;
  case 'scanner-torch':toggleScannerTorch();break;
+ case 'scanner-focus':refocusScanner();break;
  case 'edit-product':openModal('product',id);break;
  case 'delete-product':{
   const p=db.products.find(x=>x.id===ui.editId);if(!p)return;
@@ -472,6 +571,7 @@ document.addEventListener('input',event=>{
  if(input.dataset.search){const key=input.dataset.search;const map={inventory:'search',billing:'billingSearch',sales:'salesSearch',customers:'customerSearch'};ui[map[key]]=input.value;rerenderKeepFocus(`[data-search="${key}"]`);}
  if(input.id==='billDiscount'){const n=Number(input.value);ui.discount=Math.max(0,Math.min(100,Number.isFinite(n)?n:0));rerenderKeepFocus('#billDiscount')}
  if(input.id==='billNotes')ui.billNotes=input.value;
+ if(input.id==='scannerZoom')applyScannerZoom(input.value);
 });
 document.addEventListener('change',event=>{
  const t=event.target;
@@ -481,6 +581,7 @@ document.addEventListener('change',event=>{
  if(t.id==='reportRange'){ui.reportRange=t.value;render()}
  if(t.id==='importFile')importBackup(t.files?.[0]);
  if(t.id==='barcodePhoto')scanBarcodeImage(t.files?.[0]);
+ if(t.id==='scannerCamera')retryScannerCamera(undefined,t.value);
 });
 document.addEventListener('keydown',event=>{if(event.key==='Escape'&&scanner.open){stopScanner();return}if(event.key==='Escape'&&ui.modal)closeModal();if((event.ctrlKey||event.metaKey)&&event.key==='k'){event.preventDefault();navigate('inventory');$('[data-search="inventory"]')?.focus()}});
 $('#menuToggle').addEventListener('click',()=>{$('.sidebar').classList.toggle('open');let b=$('#backdrop');if(!b){b=document.createElement('div');b.id='backdrop';b.className='mobile-backdrop';document.body.appendChild(b);b.addEventListener('click',()=>{$('.sidebar').classList.remove('open');b.classList.remove('show')})}b.classList.toggle('show', $('.sidebar').classList.contains('open'))});
