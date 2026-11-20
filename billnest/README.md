@@ -87,3 +87,16 @@ After changing `app.js` or `logic.mjs`, always regenerate `app.bundle.js`. Deplo
 4. Try **Scan from photo / camera**, then **manual entry** if the photo is unreadable.
 
 Product information (price, tax, description) is *not* derived from a UPC/EAN barcode automatically. A new product must be saved first.
+
+
+## Close-range live barcode scanning (10–20 cm)
+
+- Uses the rear camera at up to 1080p when supported and requests continuous autofocus where the browser exposes it.
+- Does **not** restart the video stream when switching from native recognition to ZXing, preventing an autofocus reset.
+- Native recognition alternates full-frame and a high-resolution central region before trying the enhanced reader.
+- If multiple camera lenses are exposed, use the **Camera lens** selector to select a **Macro** or close-focus lens.
+- On supported phones, use the **Zoom** slider or **Refocus** button to improve framing. Zoom cannot fix a physically out-of-focus camera.
+- **Scan from photo / camera** is retained for phones that cannot focus at 10–20 cm during a live browser video stream.
+- Live camera access requires HTTPS or localhost; the external ZXing fallback requires internet access.
+
+A web app cannot force an unsupported camera lens or guarantee that every phone's camera focuses at 10 cm. Keep the full bars and quiet zones visible; reduce reflections and ensure even lighting.
