@@ -134,3 +134,24 @@
 .invoice-bottom .invoice-total{width:100%;margin:0}
 @media(max-width:520px){.invoice-bottom{grid-template-columns:minmax(0,1fr);gap:14px}.invoice-bottom .invoice-total{max-width:240px;justify-self:end}}
 @media print{.invoice-bottom{grid-template-columns:minmax(0,1fr) 240px;align-items:end}.invoice-terms{break-inside:avoid-page;page-break-inside:avoid}.invoice-terms h4,.invoice-terms p{color:#222!important}}
+
+/* Business logo in store settings and invoice header. */
+.business-logo-uploader{display:flex;gap:18px;align-items:center;margin:14px 0 22px;padding:14px;border:1px solid #e2e9ef;border-radius:12px;background:#f9fbfc}
+.business-logo-preview{display:flex;justify-content:center;align-items:center;flex:0 0 108px;width:108px;height:86px;background:#fff;border:1px dashed #cbd6df;border-radius:10px;overflow:hidden}
+.business-logo-preview-image{max-width:100%;max-height:100%;object-fit:contain}
+.business-logo-placeholder{font-size:34px;color:#9daebb}
+.business-logo-controls{display:flex;flex-direction:column;gap:7px;min-width:0}
+.business-logo-controls>label{font-size:13px;font-weight:750;color:#243748}
+.business-logo-controls>span{font-size:11px;line-height:1.5;color:#677989}
+.business-logo-buttons{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.business-logo-upload{cursor:pointer;display:inline-flex;align-items:center}
+.business-logo-file{position:absolute;width:1px;height:1px;opacity:0;pointer-events:none}
+.business-logo-upload:focus-within{outline:2px solid #118467}
+#removeBusinessLogo[hidden]{display:none!important}
+.invoice-business-block{display:flex;align-items:flex-start;gap:12px;max-width:100%;min-width:0}
+.invoice-business-details{flex:1;min-width:0;overflow-wrap:anywhere}
+.invoice-logo{width:74px;height:74px;max-height:74px;object-fit:contain;flex:0 0 74px}
+.invoice-footer-primary{font-size:11px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere}
+.invoice-footer-secondary{font-size:9px;margin-top:5px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere}
+@media(max-width:520px){.business-logo-uploader{align-items:flex-start;gap:12px}.business-logo-preview{width:82px;height:72px;flex-basis:82px}.invoice-logo{width:50px;height:50px;flex-basis:50px}}
+@media print{.invoice-logo{print-color-adjust:exact;-webkit-print-color-adjust:exact}.invoice-business-block{break-inside:avoid}}
