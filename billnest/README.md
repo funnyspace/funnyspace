@@ -56,15 +56,18 @@ The source is in the `billnest/` folder of the connected `funnyspace/funnyspace`
 
 Run all tests with `node --test tests/*.test.mjs` (Node.js 18+).
 
-## Mobile barcode scanning (v3)
+## Mobile barcode scanning (v4)
 
-The Inventory and Billing screens include a **Scan barcode** button. On an HTTPS-hosted website, tap Scan and allow camera permission. A rear-facing camera is requested when available. The scanner reads product barcodes such as EAN-13, UPC, and Code 128, subject to the phone/browser's decoder support.
+The Inventory and Billing screens include a **Scan barcode** button. On an HTTPS-hosted website, tap Scan and allow camera permission. The rear-facing camera is requested first. Use **Switch camera** if the wrong camera opens. The scanner reads product barcodes such as EAN-13, UPC, and Code 128, subject to the phone/browser's decoder support.
 
 - **Inventory:** Scanning a saved barcode or SKU opens the existing product to edit. A new code opens the product form with the barcode and SKU prefilled. Enter the name, price, stock, and GST rate manually before saving.
 - **Billing:** Scanning a known code adds one unit to the active invoice (up to available stock). Scanning an unknown code opens the product form, then returns to Billing and adds it automatically if its initial stock is positive.
 - **Product form:** Scan to fill the barcode input, or type/paste a code. Each product barcode must be unique and previously saved SKU values still match.
-- **Fallback:** Manual barcode entry is always available, including if camera permission is denied or the browser has no camera. Browser-native `BarcodeDetector` is preferred. Otherwise the app attempts to load a pinned ZXing browser library from a CDN when online. Native support and fallback compatibility vary by phone and browser.
-- **Privacy:** Video is processed in the browser and not uploaded by this application. The initial fallback decoder script, if needed, is downloaded from the CDN. Camera tracks are stopped on close, navigation, tab backgrounding, and page exit.
+- **Improved recognition:** The scanner starts with the browser native decoder where it supports retail barcodes, then automatically attempts to switch to the ZXing decoder if it repeatedly fails to read a code. Both decoders are browser-based, and a clear error is shown when a decoder cannot load.
+- **Camera selection:** The ZXing reader explicitly requests the rear-facing camera instead of taking the device default (often the selfie camera). The **Switch camera**, **Retry**, and supported **Flashlight** controls are available.
+- **Photo scanning:** Use **Scan from photo / camera** to take or select a clear barcode photograph, which can help with small or poorly focused labels. An image is read locally by the browser and is not uploaded by BillNest.
+- **Manual entry:** Type the barcode, EAN, UPC, or SKU and tap **Use code** if recognition is unavailable.
+- **Privacy:** Video is processed in the browser and not uploaded by this application. The initial fallback decoder script, if needed, is downloaded from the CDN. Camera tracks are stopped on close, navigation, and page exit; the camera is paused in background tabs and restarted when returning.
 - **Important:** Camera access requires HTTPS (or another browser-trusted secure origin), explicit user permission, and an actual mobile camera. A locally opened `index.html` may only offer manual entry. For live camera access, deploy to an HTTPS host. This is still a browser-local storage app, not a multi-device synchronized inventory system.
 
 ### Build / tests
@@ -75,3 +78,12 @@ node --test tests/*.mjs
 ```
 
 After changing `app.js` or `logic.mjs`, always regenerate `app.bundle.js`. Deploy both `styles.css` and `app.bundle.js` with `index.html` together, and hard-refresh your mobile browser if the old version is cached.
+
+### Troubleshooting a barcode that does not scan
+
+1. Use the **published HTTPS website** in Chrome (Android) or Safari (iPhone), not a `file://` ZIP preview or GitHub source-code view. Allow camera permission in browser site settings.
+2. Hold the printed barcode flat in good light, with the full barcode inside the guide. Tap **Switch camera** if the selfie camera opens. Avoid zooming so close that the lines blur.
+3. Leave the camera pointed at the code for several seconds so the app can switch decoding engines when needed. The fallback decoder requires internet access to load its script.
+4. Try **Scan from photo / camera**, then **manual entry** if the photo is unreadable.
+
+Product information (price, tax, description) is *not* derived from a UPC/EAN barcode automatically. A new product must be saved first.
