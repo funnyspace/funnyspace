@@ -55,3 +55,23 @@ The source is in the `billnest/` folder of the connected `funnyspace/funnyspace`
 - `tests/logic.test.mjs`: tests for billing calculations and stock validation.
 
 Run all tests with `node --test tests/*.test.mjs` (Node.js 18+).
+
+## Mobile barcode scanning (v3)
+
+The Inventory and Billing screens include a **Scan barcode** button. On an HTTPS-hosted website, tap Scan and allow camera permission. A rear-facing camera is requested when available. The scanner reads product barcodes such as EAN-13, UPC, and Code 128, subject to the phone/browser's decoder support.
+
+- **Inventory:** Scanning a saved barcode or SKU opens the existing product to edit. A new code opens the product form with the barcode and SKU prefilled. Enter the name, price, stock, and GST rate manually before saving.
+- **Billing:** Scanning a known code adds one unit to the active invoice (up to available stock). Scanning an unknown code opens the product form, then returns to Billing and adds it automatically if its initial stock is positive.
+- **Product form:** Scan to fill the barcode input, or type/paste a code. Each product barcode must be unique and previously saved SKU values still match.
+- **Fallback:** Manual barcode entry is always available, including if camera permission is denied or the browser has no camera. Browser-native `BarcodeDetector` is preferred. Otherwise the app attempts to load a pinned ZXing browser library from a CDN when online. Native support and fallback compatibility vary by phone and browser.
+- **Privacy:** Video is processed in the browser and not uploaded by this application. The initial fallback decoder script, if needed, is downloaded from the CDN. Camera tracks are stopped on close, navigation, tab backgrounding, and page exit.
+- **Important:** Camera access requires HTTPS (or another browser-trusted secure origin), explicit user permission, and an actual mobile camera. A locally opened `index.html` may only offer manual entry. For live camera access, deploy to an HTTPS host. This is still a browser-local storage app, not a multi-device synchronized inventory system.
+
+### Build / tests
+
+```bash
+node scripts/build.mjs
+node --test tests/*.mjs
+```
+
+After changing `app.js` or `logic.mjs`, always regenerate `app.bundle.js`. Deploy both `styles.css` and `app.bundle.js` with `index.html` together, and hard-refresh your mobile browser if the old version is cached.
