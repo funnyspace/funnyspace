@@ -104,3 +104,11 @@ A web app cannot force an unsupported camera lens or guarantee that every phone'
 ## Invoice Terms & Conditions
 
 Open **Settings → Store settings → Invoice Terms & Conditions** and enter the terms you would like printed on customer bills. Click **Save settings**. The text is displayed on the **bottom-left of newly generated invoices**, alongside the totals on the right. Line breaks are preserved. Empty text hides this section. Terms are saved in the browser and included in JSON backups; each generated invoice keeps its original terms, even if you update your store settings later. Existing invoices created before this update continue to display without terms.
+
+## Business logo and invoice footer customization
+
+Go to **Settings → Business details** to upload a **PNG, JPG or WebP** shop logo (up to 4 MB). The image is resized within 360 × 180 px for quick local saving. Click **Save settings** after selecting or removing it. The logo appears at the top-left of new invoices beside the business name, including print/PDF output. SVG files and remote image URLs are not accepted. The browser retains logo versions used on previously issued invoices, even when you remove your current logo. Logo image data is stored once per version in `logoAssets` rather than copied into every invoice, keeping invoices compact.
+
+Under **Settings → Invoice footer message**, customise **Thank-you message** and **Second footer line**. Leave either field empty to hide that line. Both lines are centred at the bottom of new invoices. The existing **Invoice Terms & Conditions** field remains separate and prints at the lower-left beside the invoice totals. Past invoices retain their original logo, terms and footer text because they capture the settings active when the invoice was issued.
+
+All settings, logo versions and invoices are saved only in this browser's local workspace. A **Download JSON** backup also contains the logo assets. Do not clear browser storage without backing up your store data.
