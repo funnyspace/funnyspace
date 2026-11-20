@@ -103,3 +103,21 @@
 .scanner-camera-label{font-weight:700}
 .scanner-preview video{background:#152333}
 @media(max-width:420px){.scanner-actions .btn{font-size:12px;flex:1 1 29%;padding:0 7px;min-height:40px}.scanner-top{padding-top:16px}.scanner-preview{min-height:195px}}
+
+/* 10–20 cm close-range scanning: sharp uncropped video and supported lens controls. */
+.scanner-preview video{object-fit:contain}
+.scanner-guide{inset:26% 5% 29%;border-radius:8px;box-shadow:0 0 0 110px rgba(0,0,0,.18)}
+.scanner-guide::after{inset:50% 4% auto;opacity:.75}
+.scanner-distance{margin:0 20px 12px;padding:9px 12px;border-radius:9px;border:1px solid #c4e9dc;background:#effaf5;display:flex;flex-direction:column;gap:2px;color:#155f4b;font-size:12px}
+.scanner-distance strong{font-size:13px}.scanner-distance span{color:#416e60;font-size:11px}
+.scanner-optics{display:flex;flex-direction:column;gap:10px;margin:0 20px 12px}
+.scanner-camera-pick,.scanner-zoom{padding:9px 11px;background:#f6f8fa;border:1px solid #e4e8ed;border-radius:10px}
+.scanner-camera-pick label,.scanner-zoom label{font-size:12px;font-weight:760;color:#2c4550}
+.scanner-camera-pick select{width:100%;min-width:0;display:block;margin-top:7px;font-size:16px;padding:8px;border:1px solid #ccd6dc;border-radius:8px;background:white;color:#203344}
+.scanner-zoom>div{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.scanner-zoom output{font-size:12px;color:#0a7a60;font-weight:800}
+.scanner-zoom input{width:100%;accent-color:#137a64;margin:7px 0 0;height:27px}
+.scanner-actions{gap:7px}.scanner-actions .btn{flex:1 1 85px;min-height:43px}
+.scanner-optics [hidden],#scannerZoomWrap[hidden],#scannerCameraWrap[hidden]{display:none!important}
+@media(max-width:700px){.scanner-preview{max-height:38dvh;min-height:200px}.scanner-guide{inset:29% 5% 30%}.scanner-top{padding-bottom:11px}.scanner-status{margin-top:8px;margin-bottom:10px}}
+@media(max-width:380px){.scanner-actions .btn{flex:1 1 40%;font-size:12px}.scanner-distance{margin-bottom:8px}.scanner-photo-hint{margin-bottom:8px}}
