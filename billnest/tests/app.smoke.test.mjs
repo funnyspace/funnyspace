@@ -48,6 +48,8 @@ test('mobile scanner opens in inventory and billing with manual barcode entry fa
  clickGo('inventory');clickAction('scan-inventory');
  assert.match(node('#scannerLayer').innerHTML,/id="scanManualForm"/);
  assert.match(node('#scannerLayer').innerHTML,/id="scannerVideo"/);
+ assert.match(node('#scannerLayer').innerHTML,/data-action="scanner-switch"/);
+ assert.match(node('#scannerLayer').innerHTML,/id="barcodePhoto"/);
  clickAction('close-scanner');
  assert.equal(node('#scannerLayer').innerHTML,'');
  clickGo('billing');clickAction('scan-billing');
