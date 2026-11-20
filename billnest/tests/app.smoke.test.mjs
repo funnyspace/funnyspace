@@ -43,3 +43,25 @@ test('modal backdrop does not swallow product form submit clicks',()=>{
   assert.match(modal,/class="modal-overlay" role="presentation"/);
   assert.doesNotMatch(modal,/class="modal-overlay"[^>]*data-action/);
 });
+test('mobile scanner opens in inventory and billing with manual barcode entry fallback',()=>{
+ globalThis.document.body={classList:{add(){},remove(){}}};
+ clickGo('inventory');clickAction('scan-inventory');
+ assert.match(node('#scannerLayer').innerHTML,/id="scanManualForm"/);
+ assert.match(node('#scannerLayer').innerHTML,/id="scannerVideo"/);
+ clickAction('close-scanner');
+ assert.equal(node('#scannerLayer').innerHTML,'');
+ clickGo('billing');clickAction('scan-billing');
+ assert.match(node('#scannerLayer').innerHTML,/Scan items for billing/);
+ clickAction('close-scanner');
+});
+test('manual barcode in inventory pre-populates product barcode and SKU',()=>{
+ clickGo('inventory');clickAction('scan-inventory');
+ const OldFormData=globalThis.FormData;
+ globalThis.FormData=class {constructor(form){this.barcode=form.value} get(){return this.barcode}};
+ try{
+  const form={value:'00012345678901',matches:selector=>selector==='#scanManualForm'};
+  listeners.submit({target:form,preventDefault(){}});
+  assert.match(node('#modalLayer').innerHTML,/id="barcode"[^>]*value="00012345678901"/);
+  assert.match(node('#modalLayer').innerHTML,/id="sku"[^>]*value="00012345678901"/);
+ }finally{globalThis.FormData=OldFormData;clickAction('close-modal')}
+});
