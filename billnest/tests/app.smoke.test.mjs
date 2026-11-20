@@ -67,3 +67,43 @@ test('manual barcode in inventory pre-populates product barcode and SKU',()=>{
   assert.match(node('#modalLayer').innerHTML,/id="sku"[^>]*value="00012345678901"/);
  }finally{globalThis.FormData=OldFormData;clickAction('close-modal')}
 });
+
+test('store terms are saved with line breaks and printed on lower-left of new invoices',()=>{
+ clickGo('settings');
+ assert.match(node('#main').innerHTML,/id="termsAndConditions"/);
+ assert.match(node('#main').innerHTML,/Invoice Terms &amp; Conditions/);
+ const base={businessName:'Test Store',owner:'Owner',phone:'',email:'',gstin:'',address:'',state:'Bihar',taxMode:'exclusive',invoicePrefix:'INV'};
+ const terms='Payment due within 7 days.\nNo returns without receipt. <script>alert(1)</script>';
+ const PreviousFormData=globalThis.FormData;
+ globalThis.FormData=class {constructor(form){this.entries=Object.entries(form.values)}*[Symbol.iterator](){yield* this.entries}};
+ const submit=(id,values)=>listeners.submit({target:{id,values,matches:s=>s.split(',').some(x=>x.trim()===`#${id}`)},preventDefault(){}});
+ try{
+  submit('settingsForm',{...base,termsAndConditions:terms});
+  let data=JSON.parse(items.get('billnest-workspace-v1'));
+  assert.equal(data.settings.termsAndConditions,terms);
+  assert.match(node('#main').innerHTML,/No returns without receipt. &lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+  clickGo('inventory');clickAction('add-product');
+  submit('productForm',{name:'Terms test item',sku:'TEST-TERMS',barcode:'',category:'Testing',unit:'pcs',price:'120',cost:'70',stock:'5',lowStock:'1',gst:'18'});
+  clickGo('billing');
+  const id=JSON.parse(items.get('billnest-workspace-v1')).products.at(-1).id;
+  clickAction('add-to-cart',id);
+  clickAction('save-invoice');
+  data=JSON.parse(items.get('billnest-workspace-v1'));
+  const invoice=data.invoices.at(-1);
+  assert.equal(invoice.business.termsAndConditions,terms);
+  const paper=node('#modalLayer').innerHTML;
+  assert.match(paper,/class="invoice-bottom"/);
+  assert.match(paper,/class="invoice-bottom-left"/);
+  assert.match(paper,/class="invoice-terms"/);
+  assert.match(paper,/No returns without receipt. &lt;script&gt;alert\(1\)&lt;\/script&gt;/);
+  assert.doesNotMatch(paper,/<script>alert/);
+  clickAction('print-invoice',invoice.id);
+  assert.match(node('#printLayer').innerHTML,/class="invoice-terms"/);
+  clickAction('close-modal');
+  clickGo('settings');
+  submit('settingsForm',{...base,termsAndConditions:'Updated terms apply to future invoices only.'});
+  assert.equal(JSON.parse(items.get('billnest-workspace-v1')).invoices.at(-1).business.termsAndConditions,terms);
+  clickGo('sales');clickAction('view-invoice',invoice.id);
+  assert.match(node('#modalLayer').innerHTML,/No returns without receipt/);
+ }finally{globalThis.FormData=PreviousFormData;clickAction('close-modal')}
+});
