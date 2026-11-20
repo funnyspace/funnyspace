@@ -94,3 +94,12 @@
 @media print{#scannerLayer,.scanner-overlay{display:none!important}}
 
 #scannerTorch[hidden]{display:none!important}
+
+/* Scanner usability improvements. Keep actions accessible above the mobile keyboard. */
+.scanner-photo-button{display:block;margin:0 20px;padding:12px 13px;background:#e9f6f0;color:#0f6652;border:1px solid #b5dccd;border-radius:10px;text-align:center;font-weight:750;font-size:13px;cursor:pointer;min-height:44px}
+.scanner-photo-input{position:absolute;width:1px;height:1px;opacity:0;overflow:hidden;pointer-events:none}
+.scanner-photo-button:focus-within{outline:2px solid #118467}
+.scanner-photo-hint{margin:8px 20px 14px;color:#647588;font-size:11px;line-height:1.5}
+.scanner-camera-label{font-weight:700}
+.scanner-preview video{background:#152333}
+@media(max-width:420px){.scanner-actions .btn{font-size:12px;flex:1 1 29%;padding:0 7px;min-height:40px}.scanner-top{padding-top:16px}.scanner-preview{min-height:195px}}
