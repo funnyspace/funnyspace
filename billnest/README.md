@@ -100,3 +100,7 @@ Product information (price, tax, description) is *not* derived from a UPC/EAN ba
 - Live camera access requires HTTPS or localhost; the external ZXing fallback requires internet access.
 
 A web app cannot force an unsupported camera lens or guarantee that every phone's camera focuses at 10 cm. Keep the full bars and quiet zones visible; reduce reflections and ensure even lighting.
+
+## Invoice Terms & Conditions
+
+Open **Settings → Store settings → Invoice Terms & Conditions** and enter the terms you would like printed on customer bills. Click **Save settings**. The text is displayed on the **bottom-left of newly generated invoices**, alongside the totals on the right. Line breaks are preserved. Empty text hides this section. Terms are saved in the browser and included in JSON backups; each generated invoice keeps its original terms, even if you update your store settings later. Existing invoices created before this update continue to display without terms.
