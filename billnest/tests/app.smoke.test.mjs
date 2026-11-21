@@ -147,11 +147,15 @@ test('business logo upload, custom invoice footer, escaped messages and invoice 
   assert.equal(inv.business.logoKey,key);
   assert.equal(inv.business.invoiceFooterNote,'For help: call 12345');
   assert.doesNotMatch(JSON.stringify(inv),/data:image\/png/);
+  assert.match(node('#modalLayer').innerHTML,/class="invoice-logo-top"/);
+  assert.match(node('#modalLayer').innerHTML,/<article class="invoice-paper printable-invoice"><div class="invoice-logo-top">/);
+  assert.doesNotMatch(node('#modalLayer').innerHTML,/<div class="invoice-business-block"><img/);
   assert.match(node('#modalLayer').innerHTML,/class="invoice-logo"/);
   assert.match(node('#modalLayer').innerHTML,/Thanks &lt;friends&gt; &amp; family!/);
   assert.doesNotMatch(node('#modalLayer').innerHTML,/<friends>/);
   assert.match(node('#modalLayer').innerHTML,/For help: call 12345/);
   clickAction('print-invoice',inv.id);
+  assert.match(node('#printLayer').innerHTML,/class="invoice-logo-top"/);
   assert.match(node('#printLayer').innerHTML,/class="invoice-logo"/);
   assert.match(node('#printLayer').innerHTML,/For help: call 12345/);
   clickAction('close-modal');
