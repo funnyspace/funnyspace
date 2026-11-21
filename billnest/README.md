@@ -174,49 +174,23 @@ On mobile phones, the live camera fills the full preview rather than appearing i
 
 Previous invoices and backups remain compatible. Previously paid UPI invoices remain paid.
 
-## Hindi / English interface and receipt printing
+## Hindi / English interface and invoice printing
 
-BillNest has an **EN / हिं** language switch in the top bar. Tap it to switch between
-English and Hindi. The selection stays on this browser/device across reloads.
-Main navigation, dashboards, billing, inventory, accounting, forms, settings,
-and common actions are translated. Numbers, invoice values, product names and
-customer details are not translated or changed. Some extended help/error text
-and legacy invoice content may remain in English.
+BillNest offers an **EN / हिं** language switch in the top bar. Tap it to
+switch between English and Hindi. The preference is remembered on this device.
+The main navigation, dashboards, billing, inventory, accounting, forms,
+settings and common actions are translated. Business records, prices,
+invoice numbers and customer details remain unchanged. Some older
+help/error text and invoice data may still appear in English.
 
-**Thermal receipt printing:**
+**Invoice printing:** Open an invoice from **Invoices & Sales**, or
+create a new invoice, then choose **Print / Save as PDF**. BillNest
+uses your browser's standard print dialog and retains the existing
+full-page invoice layout.
 
-1. Open **Settings > Receipt printer** and choose **58 mm** or **80 mm**.
-2. On desktop or phone, pair/install your thermal printer using your operating
-   system or the manufacturer's print service. Set the matching 58/80 mm paper
-   size in the printer driver or browser's print dialog.
-3. Create an invoice, or open a saved invoice from **Invoices & Sales**.
-4. Click **Print thermal receipt** to open a compact receipt in a new tab,
-   then choose the installed printer in the system print dialog. This route
-   can work for **Bluetooth Classic, USB, and Wi-Fi** printers that are
-   installed in the operating system. Allow pop-ups for BillNest if prompted.
-5. An optional **Bluetooth LE** button can directly send ESC/POS bytes from
-   supported HTTPS browsers to a *compatible* BLE GATT printer. It requests
-   explicit device permission and tests a few common write characteristics.
-   It will not work with every printer or Bluetooth Classic-only device.
-   Direct ESC/POS output is ASCII-only, and blocks Hindi/Unicode product or
-   shop names instead of silently replacing them. For Hindi receipts, use
-   the system print route, which prints with the device's Unicode fonts.
-6. **Test receipt** in Settings prints clearly marked sample data without
-   recording any invoice or stock movement.
-
-Receipts contain the stored invoice number/date, customer, items and
-quantities, taxable amount, CGST/SGST or IGST, discount, total, payment
-method, and any outstanding balance, plus shop details and footer text.
-The original A4 **Print / Save as PDF** button remains available.
-
-**Compatibility:** Browser permission and printer protocol support vary.
-Web Bluetooth supports Bluetooth **Low Energy GATT**, not generic Bluetooth
-Classic SPP connections. Chromium desktop browsers can support compatible
-Bluetooth Classic serial devices using Web Serial; this BillNest implementation
-currently uses the operating-system print route for Classic devices.
-Bluetooth LE direct printing must be tested on the actual ESC/POS model.
-A generic website cannot guarantee automatic cut, Hindi support, connection
-stability, or silent printing on every thermal printer.
+Dedicated Bluetooth LE printing, 58/80 mm thermal-receipt layouts,
+printer preferences and test receipts have been removed. The removed
+printer options do not affect saved invoices or billing calculations.
 
 ## Account creation troubleshooting (registration fix)
 
