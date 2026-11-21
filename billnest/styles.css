@@ -368,3 +368,21 @@
  .mobile-brand-mark{width:29px;height:34px;flex:0 0 29px;display:flex;justify-content:center;align-items:center;padding:4px;background:#102E43;border-radius:7px}
  .mobile-brand-mark img{display:block;width:21px;height:26px;object-fit:contain}
 }
+
+/* Installable BillNest PWA: compact opt-in mobile installation banner */
+.install-app-card[hidden],.install-app-help[hidden]{display:none!important}
+.install-app-card{display:none}
+@media(max-width:700px){
+ .install-app-card:not([hidden]){display:flex;align-items:center;gap:10px;background:#eef8f3;border:1px solid #b8dfd1;border-radius:12px;margin:12px 12px 0;padding:10px}
+ .install-app-card>img{width:44px;height:44px;flex:0 0 44px;border-radius:10px}
+ .install-app-copy{min-width:0;flex:1;display:flex;flex-direction:column;gap:3px}
+ .install-app-copy strong{font-size:13px;color:#10392e}
+ .install-app-copy small{font-size:11px;line-height:1.35;color:#486c60}
+ .install-app-help{font-size:11px;line-height:1.4;margin:4px 0 0;color:#0d6852}
+ #installAppButton{min-height:40px;padding:6px 10px;flex:0 0 auto;font-size:11px;white-space:nowrap}
+ #installAppDismiss{background:transparent;border:0;padding:6px;align-self:start;font-size:19px;color:#5b756d}
+}
+@media(max-width:360px){
+ .install-app-card:not([hidden]){flex-wrap:wrap}
+ #installAppButton{margin-left:auto}
+}
