@@ -296,3 +296,17 @@
 /* Scanner v17: three-state light control and automatic low-light assistance */
 #scannerTorch:not([hidden]){font-weight:760;min-width:113px;border-color:#87c8ac;background:#e7f6ed;color:#135d48}
 #scannerTorch[hidden]{display:none!important}
+
+
+/* v18: Full-width mobile barcode camera. The prior object-fit:contain rule
+   letterboxed portrait camera video into a thin center column on phones. */
+@media (max-width:700px){
+  .scanner-preview{position:relative;min-width:0;margin-inline:12px;height:clamp(260px,39dvh,400px);min-height:260px;max-height:none;flex:0 0 auto;overflow:hidden}
+  .scanner-preview video{position:absolute;inset:0;width:100%;height:100%;display:block;object-fit:cover;object-position:center center;background:#152333}
+  .scanner-guide{inset:7% 3% 15%;border-radius:10px;box-shadow:0 0 0 130px rgba(0,0,0,.12)}
+  .scanner-guide::after{inset:50% 3% auto;opacity:.7}
+  .scanner-camera-label{left:12px;right:12px;bottom:12px}
+}
+@media (max-width:350px){
+  .scanner-preview{min-height:235px;height:clamp(235px,36dvh,350px)}
+}
