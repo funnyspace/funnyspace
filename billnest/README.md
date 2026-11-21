@@ -1,4 +1,4 @@
-# BillNest: Simple inventory and billing
+# BillNest: Inventory, Billing and Accounting
 
 A clean, mobile-friendly starter website for a small shop, with product and stock tracking, customers, GST-aware invoicing, printable invoices and basic reports. **No npm install, database or paid server is needed to try it.**
 
@@ -6,7 +6,7 @@ A clean, mobile-friendly starter website for a small shop, with product and stoc
 
 1. Download the ZIP, extract the `billnest` folder, and **double-click `index.html`** in a modern browser. The included `app.bundle.js` works without a web server and does not need npm.
 2. Choose **Billing** in the left sidebar. On phones, use the **Billing** tab in the fixed bottom navigation.
-3. The dashboard offers one-click actions for **Billing**, **Add product**, and **View invoices**.
+3. The dashboard offers one-click actions for **Billing**, **Add product**, and **Accounting**.
 4. A clearly labelled **demo workspace** appears first. Click **Start with an empty store** to remove sample data, then add products in **Inventory** and create your own invoice.
 
 If opening files is restricted by your browser, serve the folder using `python -m http.server 8000` and visit `http://localhost:8000`.
@@ -15,7 +15,7 @@ Direct page links work using URL hashes such as `index.html#dashboard`, `index.h
 
 ## Development
 
-The editable source is split between `app.js` (screens and events) and `logic.mjs` (calculations). The website loads `app.bundle.js` to avoid browser module/CORS issues when opening the ZIP. **After editing app.js or logic.mjs, regenerate the bundle** with `node scripts/build.mjs`. Test with `node --test tests/*.test.mjs` (Node.js 18+).
+The editable source is split between `app.js` (screens and events) `logic.mjs` (billing arithmetic) and `accounting.mjs` (cashbook and financial summary). The website loads `app.bundle.js` to avoid browser module/CORS issues when opening the ZIP. **After editing app.js, logic.mjs or accounting.mjs, regenerate the bundle** with `node scripts/build.mjs`. Test with `node --test tests/*.test.mjs` (Node.js 18+).
 
 ## Features
 
@@ -23,7 +23,7 @@ The editable source is split between `app.js` (screens and events) and `logic.mj
 - Add or edit products, manage quantity and record stock adjustments.
 - Simple point-of-sale cart with stock validation and percent discounts.
 - GST-inclusive or GST-exclusive product pricing, calculating CGST/SGST for same-state supplies and IGST for interstate supplies when both states are configured.
-- Customers, payment methods, paid/unpaid invoices, printing and browser **Save as PDF**.
+- Customers, payment methods, fully/partially paid invoices, printing and browser **Save as PDF**.
 - Sales history, basic reports, CSV exports, JSON backup and restore.
 - Responsive layout for desktop, tablet and mobile.
 
@@ -48,7 +48,8 @@ The source is in the `billnest/` folder of the connected `funnyspace/funnyspace`
 
 - `index.html`: page shell, app loading and sidebar.
 - `styles.css`: responsive application design and invoice print stylesheet.
-- `logic.mjs`: tax arithmetic, safe HTML text and CSV encoding.
+- `logic.mjs`: tax arithmetic, gross profit, safe HTML text and CSV encoding.
+- `accounting.mjs`: cashbook, invoice receivables, and estimated net-profit calculations.
 - `app.js`: editable screens, interactions and local browser storage.
 - `app.bundle.js`: browser-ready script, used by `index.html`.
 - `scripts/build.mjs`: regenerate the portable bundle after editing the source.
@@ -107,7 +108,7 @@ Open **Settings → Store settings → Invoice Terms & Conditions** and enter th
 
 ## Business logo and invoice footer customization
 
-Go to **Settings → Business details** to upload a **PNG, JPG or WebP** shop logo (up to 4 MB). The image is resized within 360 × 180 px for quick local saving. Click **Save settings** after selecting or removing it. The logo appears at the top-left of new invoices beside the business name, including print/PDF output. SVG files and remote image URLs are not accepted. The browser retains logo versions used on previously issued invoices, even when you remove your current logo. Logo image data is stored once per version in `logoAssets` rather than copied into every invoice, keeping invoices compact.
+Go to **Settings → Business details** to upload a **PNG, JPG or WebP** shop logo (up to 4 MB). The image is resized within 360 × 180 px for quick local saving. Click **Save settings** after selecting or removing it. The logo appears at the top center of the bill above the business name, including print/PDF output. SVG files and remote image URLs are not accepted. The browser retains logo versions used on previously issued invoices, even when you remove your current logo. Logo image data is stored once per version in `logoAssets` rather than copied into every invoice, keeping invoices compact.
 
 Under **Settings → Invoice footer message**, customise **Thank-you message** and **Second footer line**. Leave either field empty to hide that line. Both lines are centred at the bottom of new invoices. The existing **Invoice Terms & Conditions** field remains separate and prints at the lower-left beside the invoice totals. Past invoices retain their original logo, terms and footer text because they capture the settings active when the invoice was issued.
 
@@ -121,3 +122,19 @@ The dashboard shows gross profit or loss for the last 7, 30 or 90 days, or all t
 - On **new invoices**, purchase costs are saved with each invoice line in integer paise, so editing current product costs does not change the historical gross profit. Existing invoices are never mutated during display.
 - On **older invoices** without cost snapshots, historical gross profit is **estimated from the product's current purchase cost**, and the dashboard warns about these estimates. If a product has been deleted and its cost cannot be found, its sales are included in the sales total but excluded from the partial gross profit calculation, with an explicit warning.
 - Fill purchase cost for each product accurately, and use accounting software for financial net profit, tax reporting, and adjustments.
+
+
+## Accounting and cashbook (Version 11)
+
+Open **Accounting** from the sidebar or the **Accounts** tab at the bottom of the mobile website. The dashboard includes a 30-day estimated net-profit summary and a direct Accounting shortcut.
+
+- **Cash and bank balances:** Set opening amounts once using **Opening balances**. BillNest adds existing paid invoices and recorded cash/bank movements on top. UPI, card and bank transfer receipts are treated as bank movements. When you enter opening balances, avoid counting money already reflected in BillNest paid invoices.
+- **New transaction:** Enter an operating expense (rent, salary, transport, utilities), other income, inventory purchase payment, owner contribution, owner drawing or a cash/bank transfer. All values are entered in INR and stored internally in paise.
+- **Customer credit:** Selecting **Credit** when creating an invoice keeps the invoice outstanding. Use **Receive payment** from Accounting or Invoices to record partial or full payments; receipts update cash/bank balances and customer outstanding. Full payment marks the invoice as paid.
+- **Cashbook:** View dates, transaction descriptions, cash/bank movements, auto-collected paid invoices and manually entered transactions. Filter by date, search, export CSV or delete a mistaken manual entry with confirmation.
+- **Profit or loss:** Uses **invoiced gross profit excluding GST** plus **other income** minus **operating expenses**. Inventory purchases, cash/bank transfers, and owner drawings are **not** operating expenses, and invoice receipts are **not** sales revenue again. Some older invoices lack historical cost snapshots; those values are estimates, and missing costs produce an incomplete profit report.
+- **Backup compatibility:** Existing BillNest v1 browser data and JSON backups without accounting fields are read with empty accounting records. New backups include accounting entries and opening balances. The original data format stays at `version: 1` to preserve existing files.
+
+**Scope and caveats:** This is a practical cashbook and management P/L, *not* a double-entry accounting system or audited balance sheet. The opening balance is an initial amount before the activity recorded in this workspace, not a dated bank reconciliation. Supplier payables, GST input-credit, purchase tax allocation, returns/refunds, asset depreciation, loan balances, bank statement reconciliation, and statutory accounting are not implemented. Inventory purchase payments do not automatically increase product quantity; update stock in **Inventory** as a separate operation. Browser local storage is not multi-device synchronized, so back up regularly.
+
+Run `node --test tests/*.test.mjs` to test both billing and accounting calculations.
