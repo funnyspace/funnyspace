@@ -3,6 +3,24 @@ export const toPaise = value => Math.round((Number(value) || 0) * 100);
 export const rupees = paise => (Number(paise || 0) / 100);
 export const money = paise => new Intl.NumberFormat('en-IN', {style:'currency',currency:'INR',minimumFractionDigits:2,maximumFractionDigits:2}).format(rupees(paise));
 export const today = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+/** Expiry is a local calendar date, not a timestamp. The alert begins at day 30. */
+export function expiryStatus(expiryDate, reference=today()) {
+  if (!expiryDate) return {state:'none',days:null};
+  const toDay = value => {
+    if(typeof value!=='string' || !/^\d{4}-\d{2}-\d{2}$/.test(value))return null;
+    const [y,m,d]=value.split('-').map(Number);
+    if(y<1000||y>9999)return null;
+    const stamp=Date.UTC(y,m-1,d);
+    if(!Number.isFinite(stamp))return null;
+    const check=new Date(stamp);
+    return check.getUTCFullYear()===y&&check.getUTCMonth()===m-1&&check.getUTCDate()===d?stamp:null;
+  };
+  const date=toDay(expiryDate),now=toDay(reference);
+  if(date===null||now===null)return {state:'invalid',days:null};
+  const days=Math.round((date-now)/86400000);
+  return {state:days<0?'expired':days<=30?'soon':'ok',days};
+}
+
 export const safeNum = (v, fallback = 0) => Number.isFinite(Number(v)) ? Number(v) : fallback;
 export function calculateInvoice(items, productMap, discountPercent = 0, settings = {}, customer = {}) {
   const discount = Math.min(100,Math.max(0,safeNum(discountPercent)));
