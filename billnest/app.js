@@ -1,5 +1,6 @@
 import {toPaise,rupees,money,today,calculateInvoice,summarizeProfit,expiryStatus,escapeHtml as e,csvEncode} from './logic.mjs';
 import {invoiceOutstanding,makeAccountingSummary,ACCOUNT_TYPES} from './accounting.mjs';
+import {barcodeAliases,decodeRetailImageData} from './barcode-ean.mjs';
 
 const STORE_KEY = 'billnest-workspace-v1';
 const STATES = ['Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chhattisgarh','Delhi','Goa','Gujarat','Haryana','Himachal Pradesh','Jharkhand','Karnataka','Kerala','Madhya Pradesh','Maharashtra','Manipur','Meghalaya','Mizoram','Nagaland','Odisha','Punjab','Rajasthan','Sikkim','Tamil Nadu','Telangana','Tripura','Uttar Pradesh','Uttarakhand','West Bengal','Andaman and Nicobar Islands','Chandigarh','Dadra and Nagar Haveli and Daman and Diu','Jammu and Kashmir','Ladakh','Lakshadweep','Puducherry'];
@@ -95,8 +96,10 @@ async function convertBusinessLogo(file){
 }
 
 const matchBarcode = code => {
- const normalized=cleanBarcode(code).toLowerCase();
- return normalized ? db.products.find(p=>[p.barcode,p.sku].some(value=>String(value||'').trim().toLowerCase()===normalized)) : undefined;
+ // UPC-A is often reported as EAN-13 (with a leading zero) by phone cameras.
+ // Compare both valid representations without stripping other significant zeroes.
+ const lookup=new Set(barcodeAliases(cleanBarcode(code)).map(x=>x.toLowerCase()));
+ return [...lookup].some(Boolean) ? db.products.find(p=>[p.barcode,p.sku].some(value=>barcodeAliases(value).some(x=>lookup.has(x.toLowerCase())))) : undefined;
 };
 // The camera API can only request capabilities. Minimum physical focus distance
 // depends on the phone and which rear lens it exposes to the browser.
@@ -104,17 +107,17 @@ const SCANNABLE_FORMATS = ['ean_13','ean_8','upc_a','upc_e','code_128','code_39'
 const scanner = {
  open:false,mode:'billing',session:0,stream:null,controls:null,timer:null,engineTimer:null,
  busy:false,last:'',lastSeenAt:0,engine:'',facing:'environment',torch:false,switching:false,
- deviceId:'',cameras:[],zoom:1,zoomRange:null,misses:0,cropCanvas:null
+ deviceId:'',cameras:[],zoom:1,zoomRange:null,misses:0,cropCanvas:null,localCanvas:null,localTimer:null,localScans:0
 };
 const scannerStatus = (message,type='info') => {const el=$('#scannerStatus');if(el){el.textContent=message;el.dataset.state=type}};
 function releaseScannerCamera(){
  scanner.session++;
- clearTimeout(scanner.timer);clearTimeout(scanner.engineTimer);
- scanner.timer=null;scanner.engineTimer=null;scanner.busy=false;scanner.switching=false;
+ clearTimeout(scanner.timer);clearTimeout(scanner.engineTimer);clearTimeout(scanner.localTimer);
+ scanner.timer=null;scanner.engineTimer=null;scanner.localTimer=null;scanner.busy=false;scanner.switching=false;
  try{scanner.controls?.stop?.()}catch(err){console.warn('Scanner stop:',err)}scanner.controls=null;
  scanner.stream?.getTracks?.().forEach(track=>track.stop());scanner.stream=null;
  const vid=$('#scannerVideo');if(vid){try{vid.pause?.()}catch{}vid.srcObject=null}
- scanner.engine='';scanner.torch=false;scanner.zoomRange=null;scanner.misses=0;scanner.cropCanvas=null;
+ scanner.engine='';scanner.torch=false;scanner.zoomRange=null;scanner.misses=0;scanner.cropCanvas=null;scanner.localCanvas=null;scanner.localScans=0;
 }
 function stopScanner(){
  scanner.open=false;releaseScannerCamera();
@@ -149,7 +152,10 @@ function barcodeFound(raw,explicit=false){
  const code=cleanBarcode(raw);if(!code)return;
  const when=Date.now();
  // Do not bill the same visible barcode on every video frame.
- if(!explicit&&code===scanner.last&&when-scanner.lastSeenAt<2200){scanner.lastSeenAt=when;return}
+ // While the same label remains in view, suppress duplicate billing. To scan
+ // another unit of the same product, move the label out of view for ~1.5s.
+ const sameLabel=barcodeAliases(code).some(value=>barcodeAliases(scanner.last).includes(value));
+ if(!explicit&&sameLabel&&when-scanner.lastSeenAt<1500){scanner.lastSeenAt=when;return}
  scanner.last=code;scanner.lastSeenAt=when;
  if(scanner.mode==='product'){
   stopScanner();const input=$('#barcode');if(input){input.value=code;input.focus()}
@@ -289,7 +295,7 @@ async function useFallbackScanner(nativeSession){
  let zxing;
  try{zxing=await loadBarcodeLibrary()}
  catch(err){
-  if(scanner.open&&scanner.session===nativeSession){scanner.switching=false;scannerStatus('Live scanning continues. Enhanced scanner could not load; use the working photo scanner if needed.','error')}
+  if(scanner.open&&scanner.session===nativeSession){scanner.switching=false;scannerStatus('Retail barcode scanning continues. Wider-format decoder unavailable; photo scanning is still available.')}
   return;
  }
  if(!scanner.open||scanner.session!==nativeSession)return;
@@ -326,8 +332,36 @@ async function startZXingScanner(zxing,session){
  }catch(err){
   if(!scanner.open||scanner.session!==session)return;
   console.warn('Enhanced barcode scanner failed:',err);
-  scannerStatus(`Live reader failed: ${err.message||'camera error'}. You can still use Scan from photo.`,'error');
+  scannerStatus('Retail barcode reader remains active. Extra barcode formats could not start. Try a photo for difficult labels.','error');
  }
+}
+// Always-on EAN/UPC path that does not require a CDN or BarcodeDetector.
+// This uses a thin high-resolution image strip and a verified GTIN checksum.
+function startLocalRetailReader(session){
+ const loop=()=>{
+  if(!scanner.open||scanner.session!==session)return;
+  try{
+   const video=$('#scannerVideo');
+   if(video?.readyState>=2&&video.videoWidth>=320&&video.videoHeight>=120){
+    const canvas=scanner.localCanvas||(scanner.localCanvas=document.createElement('canvas'));
+    const w=Math.min(video.videoWidth,1280),h=Math.max(80,Math.min(190,Math.round(w*.15)));
+    if(canvas.width!==w)canvas.width=w;
+    if(canvas.height!==h)canvas.height=h;
+    const ctx=canvas.getContext?.('2d',{willReadFrequently:true});
+    if(ctx){
+     const sh=Math.max(80,Math.round(video.videoHeight*.44)),sy=Math.max(0,Math.round((video.videoHeight-sh)/2));
+     ctx.drawImage(video,0,sy,video.videoWidth,Math.min(sh,video.videoHeight),0,0,w,h);
+     const code=decodeRetailImageData(ctx.getImageData(0,0,w,h));
+     if(code)barcodeFound(code);
+     scanner.localScans++;
+    }
+   }
+  }catch(err){
+   if(scanner.localScans<2)console.info('Local barcode frame unavailable:',err);
+  }
+  if(scanner.open&&scanner.session===session)scanner.localTimer=setTimeout(loop,260);
+ };
+ loop();
 }
 async function startScannerCamera(){
  if(!scanner.open)return;
@@ -353,14 +387,21 @@ async function startScannerCamera(){
   if(!scanner.open||session!==scanner.session)return;
   await configureScannerTrack();
   listScannerCameras(session);
-  scannerStatus('Camera ready. Focus on the bars at 10–20 cm. Use Macro if your phone offers it.');
+  startLocalRetailReader(session);
+  scannerStatus('Camera ready. EAN / UPC scanning works offline. Keep bars sharp and fully visible.');
   const detector=await getNativeDetector();
   if(!scanner.open||session!==scanner.session)return;
   if(!detector){
-   scannerStatus('Loading enhanced barcode reader… Keep the camera steady.');
-   const zxing=await loadBarcodeLibrary();
-   if(!scanner.open||session!==scanner.session)return;
-   await startZXingScanner(zxing,session);return;
+   scanner.engine='local';
+   scannerStatus('Local retail scanner running. Loading wider barcode support…');
+   try{
+    const zxing=await loadBarcodeLibrary();
+    if(!scanner.open||session!==scanner.session)return;
+    await startZXingScanner(zxing,session);
+   }catch(err){
+    if(scanner.open&&session===scanner.session)scannerStatus('Retail EAN / UPC scanner active. Wider barcode reader unavailable offline; photo/manual entry remains available.');
+   }
+   return;
   }
   scanner.engine='native';
   // Fast escalation, but retain the same autofocus/stream if another decoder is needed.
@@ -411,6 +452,14 @@ async function scanBarcodeImage(file){
   let code='';
   const detector=await getNativeDetector();
   if(detector){try{const results=await detector.detect(img);code=results?.[0]?.rawValue||''}catch{}}
+  if(!code){
+   // Use the same offline retail decoder on still photos before loading ZXing.
+   try{
+    const canvas=document.createElement('canvas');const w=Math.min(img.naturalWidth||img.width,1600);
+    const h=Math.max(1,Math.round(w*(img.naturalHeight||img.height)/(img.naturalWidth||img.width)));
+    if(w>0&&h>0){canvas.width=w;canvas.height=h;const ctx=canvas.getContext('2d',{willReadFrequently:true});ctx.drawImage(img,0,0,w,h);code=decodeRetailImageData(ctx.getImageData(0,0,w,h))}
+   }catch(err){console.info('Photo retail decoder unavailable:',err)}
+  }
   if(!code){
    scannerStatus('Using enhanced decoder on photo…');
    const zxing=await loadBarcodeLibrary();
