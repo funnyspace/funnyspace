@@ -8,6 +8,9 @@
 .modal-footer{flex-wrap:wrap;gap:7px}
 .modal-footer .btn{white-space:normal}
 @media(max-width:700px){
+ .topbar .page-heading h1{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+ .topbar .top-actions{flex:0 0 auto;gap:5px}
+
  .billnest-language-toggle{min-width:48px;min-height:37px;padding:6px 7px;font-size:11px}
  .top-actions{gap:5px}
  .modal-footer [data-action="print-invoice"],.modal-footer [data-action="print-receipt"],.modal-footer [data-action="print-bluetooth"]{flex:1 1 130px;min-height:42px}
