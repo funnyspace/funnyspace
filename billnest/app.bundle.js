@@ -649,7 +649,6 @@ function render(){
  $('#navigation').innerHTML=PAGES.map(([key,label,icon])=>`<button type="button" data-go="${key}" class="nav-item ${ui.page===key?'active':''} ${key==='settings'?'nav-spacer':''}" ${ui.page===key?'aria-current="page"':''}><span class="nav-icon nav-icon-3d">${navIcon(key)}</span><span>${label}</span></button>`).join('');
  const mobileNav=$('#mobileBottomNav');
  if(mobileNav)mobileNav.innerHTML=['dashboard','billing','inventory','sales','accounting'].map(key=>{const [name,label,icon]=PAGES.find(p=>p[0]===key);const tabLabel=key==='sales'?'Invoices':key==='accounting'?'Accounts':label;return `<button type="button" data-go="${name}" class="mobile-tab ${ui.page===name?'active':''}" ${ui.page===name?'aria-current="page"':''}><span class="mobile-tab-icon nav-icon-3d">${navIcon(name)}</span><span>${tabLabel}</span></button>`}).join('');
- $('#breadcrumb').textContent=`WORKSPACE / ${PAGES.find(p=>p[0]===ui.page)?.[1].toUpperCase()}`;
  $('#pageTitle').textContent=PAGES.find(p=>p[0]===ui.page)?.[1]||'Overview';
  $('#storeName').textContent=db.settings.businessName||'My Store';
  $('#storeAvatar').textContent=(db.settings.businessName||'My Store').split(/\s+/).slice(0,2).map(x=>x[0]).join('').toUpperCase();
