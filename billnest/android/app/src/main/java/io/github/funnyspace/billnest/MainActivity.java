@@ -3,7 +3,7 @@ package io.github.funnyspace.billnest;
 import android.Manifest;
 import android.app.Activity;
 import android.app.DownloadManager;
-import android.app.PrintManager;
+import android.print.PrintManager;
 import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
