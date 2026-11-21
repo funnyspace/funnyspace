@@ -375,7 +375,8 @@ const e = escapeHtml;
 
 
 
-// Keep each signed-in account's local workspace separate from the guest workspace.\nconst STORE_KEY = globalThis.BillNestCloud?.workspaceKey?.() || 'billnest-workspace-v1';
+// Keep each signed-in account's local workspace separate from the guest workspace.
+const STORE_KEY = globalThis.BillNestCloud?.workspaceKey?.() || 'billnest-workspace-v1';
 const STATES = ['Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chhattisgarh','Delhi','Goa','Gujarat','Haryana','Himachal Pradesh','Jharkhand','Karnataka','Kerala','Madhya Pradesh','Maharashtra','Manipur','Meghalaya','Mizoram','Nagaland','Odisha','Punjab','Rajasthan','Sikkim','Tamil Nadu','Telangana','Tripura','Uttar Pradesh','Uttarakhand','West Bengal','Andaman and Nicobar Islands','Chandigarh','Dadra and Nagar Haveli and Daman and Diu','Jammu and Kashmir','Ladakh','Lakshadweep','Puducherry'];
 const PAGES = [
  ['dashboard','Dashboard','▦'],['billing','Billing','▧'],['inventory','Inventory','▤'],['sales','Invoices & Sales','▤'],['customers','Customers','♙'],['accounting','Accounting','₹'],['reports','Reports','▥'],['settings','Settings','⚙']
