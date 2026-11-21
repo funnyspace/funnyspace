@@ -336,3 +336,54 @@ test('mobile billing scan barcode and invoice history share one row',async()=>{
  assert.match(html,/styles\.css\?v=21/);
  clickGo('dashboard');
 });
+
+test('UPI billing generates an exact-amount pending invoice QR and verifies receipt manually',()=>{
+ const OldFormData=globalThis.FormData;
+ const fields={
+   businessName:'Test Shop UPI',owner:'',phone:'',email:'',gstin:'',address:'',state:'',
+   taxMode:'exclusive',invoicePrefix:'INV',termsAndConditions:'',invoiceThankYou:'Thanks',
+   invoiceFooterNote:'',upiId:'testmerchant@upi'
+ };
+ globalThis.FormData=class{
+  constructor(form){this.form=form}
+  *[Symbol.iterator](){yield* Object.entries(fields)}
+ };
+ try{
+  clickGo('settings');
+  listeners.submit({target:{id:'settingsForm',matches:s=>s.includes('#settingsForm')},preventDefault(){}});
+  let saved=JSON.parse(items.get('billnest-workspace-v1'));
+  assert.equal(saved.settings.upiId,'testmerchant@upi');
+  clickGo('billing');
+  listeners.change({target:{id:'billPayment',value:'UPI'}});
+  assert.match(node('#main').innerHTML,/UPI QR for/);
+  const id=node('#main').innerHTML.match(/data-action="add-to-cart" data-id="([a-z0-9-]+)"/)?.[1];
+  assert.ok(id,'expected an inventory product to bill');
+  clickAction('add-to-cart',id);
+  clickAction('save-invoice');
+  saved=JSON.parse(items.get('billnest-workspace-v1'));
+  const invoice=saved.invoices.at(-1);
+  assert.equal(invoice.payment,'UPI');
+  assert.equal(invoice.paid,false,'showing a QR is not receiving payment');
+  assert.equal(invoice.business.upiId,'testmerchant@upi');
+  const popup=node('#modalLayer').innerHTML;
+  assert.match(popup,/class="invoice-upi-qr"/);
+  assert.match(popup,/data-upi-uri="upi:\/\/pay\?pa=testmerchant%40upi/);
+  assert.match(popup,/Record verified payment/);
+  assert.match(popup,/Receiving UPI ID: testmerchant@upi/);
+  fields.amount=(invoice.total/100).toFixed(2);
+  fields.date=invoice.date;
+  fields.account='bank';
+  fields.description='Verified bank UTR';
+  clickAction('record-receipt',invoice.id);
+  listeners.submit({target:{id:'receiptForm',matches:s=>s.includes('#receiptForm')},preventDefault(){}});
+  saved=JSON.parse(items.get('billnest-workspace-v1'));
+  assert.equal(saved.invoices.at(-1).paid,true);
+  assert.equal(saved.accounting.entries.at(-1).type,'customer-receipt');
+  clickAction('view-invoice',invoice.id);
+  assert.doesNotMatch(node('#modalLayer').innerHTML,/class="invoice-upi-qr"/,'fully settled invoices must not keep requesting money');
+ }finally{
+  globalThis.FormData=OldFormData;
+  clickAction('close-modal');
+  clickGo('dashboard');
+ }
+});
