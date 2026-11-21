@@ -1,0 +1,23 @@
+
+.billnest-account-btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;min-height:36px;padding:7px 12px;border:1px solid #cad9d7;border-radius:10px;background:#fff;color:#126b56;font-weight:700;white-space:nowrap}
+.billnest-account-btn:hover{background:#eef8f4}.billnest-account-icon{font-size:18px}.billnest-auth-layer[hidden]{display:none!important}
+.billnest-auth-layer{position:fixed;inset:0;z-index:1100;display:flex;align-items:center;justify-content:center;padding:16px;background:rgba(11,28,42,.66);overflow:auto}
+.billnest-auth-panel{width:min(100%,440px);max-height:95vh;overflow-y:auto;position:relative;border-radius:19px;background:#fff;padding:28px;box-shadow:0 23px 65px #0004;color:#173243}
+.billnest-auth-title{display:flex;align-items:center;gap:12px;margin:0 20px 8px 0}.billnest-auth-title img{width:45px;height:45px;object-fit:contain}
+.billnest-auth-title h2{font-size:23px;margin:0}.billnest-auth-subtitle{color:#617888;font-size:13px;line-height:1.45;margin:0 0 20px}
+.billnest-auth-close{position:absolute;right:10px;top:8px;padding:7px 12px;border:0;background:none;font-size:24px;color:#687e8b}
+.billnest-auth-tabs{display:flex;gap:6px;background:#eef3f3;border-radius:10px;padding:5px;margin-bottom:16px}
+.billnest-auth-tabs button{flex:1;min-height:39px;border:0;border-radius:8px;background:transparent;color:#526a74;font-weight:700}
+.billnest-auth-tabs button[aria-selected=true]{background:white;color:#0d7156;box-shadow:0 2px 6px #0002}
+.billnest-auth-form{display:grid;gap:10px}.billnest-auth-form label{font-size:13px;font-weight:700}
+.billnest-auth-form input{width:100%;min-height:46px;border:1px solid #cbdbd9;border-radius:9px;font-size:16px;padding:10px 12px}
+.billnest-auth-primary{min-height:44px;width:100%;border:0;border-radius:10px;background:#137a64;color:#fff;font-weight:750;padding:9px 12px}
+.billnest-auth-primary:disabled{opacity:.6}.billnest-auth-secondary{border:0;background:none;color:#126d57;text-decoration:underline;cursor:pointer;padding:10px 0;font-weight:700}
+.billnest-auth-note{font-size:12px;line-height:1.5;color:#617888;margin:14px 0 0}
+.billnest-auth-message{padding:11px;background:#eaf7ef;color:#1c684d;border:1px solid #bce3cc;border-radius:10px;font-size:13px;line-height:1.4;margin:14px 0 0}
+.billnest-auth-message.error{background:#fff0ee;color:#a2322a;border-color:#ffd2cb}
+.billnest-auth-user{padding:15px;border:1px solid #ddeae4;background:#f3faf6;border-radius:11px;overflow-wrap:anywhere;margin:17px 0}
+.billnest-auth-user strong{display:block;margin-bottom:5px}.billnest-auth-logout{margin-top:15px;min-height:44px;width:100%;border-radius:10px;background:#fff;border:1px solid #d3dfe0;font-weight:700}
+.billnest-auth-setup{padding:15px;border-radius:10px;background:#f3faf7;border:1px dashed #accfc4}
+body.billnest-auth-open{overflow:hidden}
+@media(max-width:700px){.billnest-account-btn{width:36px;min-width:36px;padding:6px}.billnest-account-text{display:none}.billnest-auth-panel{padding:22px 18px}}
