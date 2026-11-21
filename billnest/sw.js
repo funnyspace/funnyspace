@@ -21,6 +21,14 @@ self.addEventListener('fetch',event=>{
  const url=new URL(request.url);
  const scope=new URL(self.registration.scope);
  if(url.origin!==scope.origin||!url.pathname.startsWith(scope.pathname))return;
+ // Fetch public auth config from the network first so new project settings reach installed PWAs.
+ if(url.pathname.endsWith('/auth-config.js')){
+  event.respondWith(fetch(request,{cache:'no-store'}).then(response=>{
+   if(response.ok){const copy=response.clone();caches.open(CACHE).then(cache=>cache.put(request,copy));}
+   return response;
+  }).catch(()=>caches.match(request).then(r=>r||Response.error())));
+  return;
+ }
  if(request.mode==='navigate'){
   event.respondWith(fetch(request).then(response=>{
    if(response.ok){const copy=response.clone();caches.open(CACHE).then(cache=>cache.put('./index.html',copy));}
