@@ -751,16 +751,51 @@ function renderModal(){let h='';
  }
  if(ui.modal==='invoice'){
  const inv=db.invoices.find(x=>x.id===ui.invoiceId);if(!inv)return closeModal();
- h=shellModal(`Invoice ${e(inv.number)}`,`${formatDate(inv.date)} · ${inv.paid?'Paid':'Unpaid'}`,`<div class="modal-body">${invoicePaper(inv)}</div>`,`<button class="btn" data-action="close-modal">Close</button><button class="btn btn-primary" data-action="print-invoice" data-id="${inv.id}">▤ Print / Save as PDF</button>`,'invoice-modal');
+ const paymentAction=inv.payment==='UPI'&&invoiceOutstanding(inv,db.accounting.entries)>0?'<button class="btn btn-primary" data-action="record-receipt" data-id="'+e(inv.id)+'">✓ Record verified payment</button>':'';
+ h=shellModal(`Invoice ${e(inv.number)}`,`${formatDate(inv.date)} · ${inv.paid?'Paid':'Unpaid'}`,`<div class="modal-body">${invoicePaper(inv)}</div>`,`${paymentAction}<button class="btn" data-action="close-modal">Close</button><button class="btn btn-primary" data-action="print-invoice" data-id="${inv.id}">▤ Print / Save as PDF</button>`,'invoice-modal');
  }
  $('#modalLayer').innerHTML=h;
+ if(ui.modal==='invoice')drawInvoiceUpiQr($('#modalLayer'));
  $('#modalLayer input:not([readonly]),#modalLayer select')?.focus({preventScroll:true});
 }
+function upiInvoiceSection(inv,b){
+ if(inv.payment!=='UPI')return '';
+ const due=invoiceOutstanding(inv,db.accounting.entries);
+ if(due<=0)return '';
+ const upiId=String(b.upiId||'').trim();
+ if(!isValidUpiId(upiId))return '<section class="invoice-upi-payment"><p>Receiving UPI ID was not configured when this invoice was issued.</p></section>';
+ let intent='';
+ try{intent=buildUpiIntent({upiId,payeeName:b.businessName||'My Store',amountPaise:due,reference:'BN'+String(inv.id||'').replace(/[^A-Za-z0-9]/g,''),invoiceNumber:inv.number})}catch{return ''}
+ return '<section class="invoice-upi-payment" aria-label="UPI payment QR">'
+ + '<h4>Pay by UPI</h4><div class="invoice-upi-qr" data-upi-uri="'+e(intent)+'" role="img" aria-label="Scan QR to pay '+e(rupees(due).toFixed(2))+' rupees">Preparing payment QR…</div>'
+ + '<strong class="invoice-upi-amount">'+money(due)+'</strong>'
+ + '<span class="invoice-upi-payee">Receiving UPI ID: '+e(upiId)+'</span>'
+ + '<a class="invoice-upi-open" href="'+e(intent)+'">Open UPI payment app</a>'
+ + '<p class="invoice-upi-warning">Verify the payment in your bank or UPI app before marking this invoice paid. Scanning a QR does not confirm receipt.</p></section>';
+}
+function drawInvoiceUpiQr(root){
+ if(!root?.querySelectorAll)return;
+ for(const target of root.querySelectorAll('.invoice-upi-qr[data-upi-uri]')){
+  if(typeof globalThis.QRCode!=='function'){target.textContent='QR unavailable. Use the receiving UPI ID shown below.';continue}
+  try{
+   const uri=target.dataset.upiUri;
+   target.innerHTML='';
+   new globalThis.QRCode(target,{text:uri,width:192,height:192,colorDark:'#101e30',colorLight:'#ffffff',correctLevel:globalThis.QRCode.CorrectLevel.M});
+   const canvas=target.querySelector('canvas');
+   if(canvas&&typeof canvas.toDataURL==='function'){
+    const image=canvas.toDataURL('image/png');
+    if(/^data:image\/png;base64,/.test(image))target.innerHTML='<img alt="UPI payment QR" width="192" height="192" src="'+image+'">';
+   }
+  }catch(err){console.warn('QR render error:',err);target.textContent='Unable to display QR. Check the receiving UPI ID below.'}
+ }
+}
+
 function invoicePaper(inv){const b=inv.business||db.settings,c=inv.customer||{};
  const printedTerms=String(b.termsAndConditions||'').trim();
+ const upiMarkup=upiInvoiceSection(inv,b);
  const termsMarkup=printedTerms?`<section class="invoice-terms" aria-label="Invoice terms and conditions"><h4>Terms &amp; Conditions</h4><p>${e(printedTerms)}</p></section>`:'';
  let taxLines = inv.taxType==='intra' ? `<div class="summary-row"><span>CGST</span><b>${money(inv.cgst)}</b></div><div class="summary-row"><span>SGST</span><b>${money(inv.sgst)}</b></div>`:inv.taxType==='inter'?`<div class="summary-row"><span>IGST</span><b>${money(inv.igst)}</b></div>`:`<div class="summary-row"><span>GST (split not specified)</span><b>${money(inv.tax)}</b></div>`;
- return `<article class="invoice-paper printable-invoice">${resolveBusinessLogo(b)?`<div class="invoice-logo-top">${logoMarkup(resolveBusinessLogo(b))}</div>`:''}<div class="invoice-head"><div class="invoice-business-block"><div class="invoice-business-details"><div class="invoice-business">${e(b.businessName||'My Store')}</div>${b.owner?`<p>${e(b.owner)}</p>`:''}${b.address?`<p>${e(b.address)}</p>`:''}${b.state?`<p>${e(b.state)}</p>`:''}<p>${[b.phone,b.email].filter(Boolean).map(e).join(' · ')}</p>${b.gstin?`<p><b>GSTIN:</b> ${e(b.gstin)}</p>`:''}</div></div><div><div class="invoice-title">INVOICE</div><p style="text-align:right"><b>${e(inv.number)}</b></p>${inv.demo?'<span class="chip yellow">SAMPLE · NOT FOR USE</span>':''}</div></div><div class="invoice-meta"><div><b>BILL TO</b><p><strong>${e(c.name||'Walk-in customer')}</strong></p>${c.address?`<p>${e(c.address)}</p>`:''}${c.state?`<p>${e(c.state)}</p>`:''}${c.phone?`<p>${e(c.phone)}</p>`:''}${c.gstin?`<p>GSTIN: ${e(c.gstin)}</p>`:''}</div><div style="text-align:right"><b>INVOICE DETAILS</b><p>Date: ${formatDate(inv.date)}</p><p>Payment: ${e(inv.payment)}</p><p>Status: ${invoiceOutstanding(inv,db.accounting.entries)===0?'Paid':invoiceOutstanding(inv,db.accounting.entries)===inv.total?'Unpaid':`Part paid (due ${money(invoiceOutstanding(inv,db.accounting.entries))})`}</p></div></div><div class="table-scroll"><table class="invoice-print-table"><thead><tr><th>Item</th><th>Qty</th><th>Rate</th><th>GST</th><th style="text-align:right">Amount</th></tr></thead><tbody>${inv.lines.map(x=>`<tr><td>${e(x.name)}<div style="font-size:10px;color:#8a99a6">${e(x.sku||'')}</div></td><td>${x.qty} ${e(x.unit)}</td><td>${money(x.unitPrice)}</td><td>${pct(x.gst)}</td><td style="text-align:right">${money(x.total)}</td></tr>`).join('')}</tbody></table></div><div class="invoice-bottom"><div class="invoice-bottom-left">${inv.notes?`<p class="invoice-notes"><strong>Note:</strong> ${e(inv.notes)}</p>`:''}${termsMarkup}</div><div class="invoice-total"><div class="summary-row"><span>Items subtotal ${inv.inclusive?'(incl. GST)':''}</span><b>${money(inv.list)}</b></div>${inv.discount?`<div class="summary-row"><span>Discount (${inv.discountPercent}%)</span><b>− ${money(inv.discount)}</b></div>`:''}<div class="summary-row"><span>Taxable amount</span><b>${money(inv.taxable)}</b></div>${taxLines}<div class="summary-row total"><span>Total</span><b>${money(inv.total)}</b></div></div></div><div class="invoice-footer">${String(b.invoiceThankYou??'Thank you for your business!').trim()?`<div class="invoice-footer-primary">${e(String(b.invoiceThankYou??'Thank you for your business!').trim())}</div>`:''}${String(b.invoiceFooterNote??'Invoice generated with BillNest').trim()?`<div class="invoice-footer-secondary">${e(String(b.invoiceFooterNote??'Invoice generated with BillNest').trim())}</div>`:''}</div></article>`;
+ return `<article class="invoice-paper printable-invoice">${resolveBusinessLogo(b)?`<div class="invoice-logo-top">${logoMarkup(resolveBusinessLogo(b))}</div>`:''}<div class="invoice-head"><div class="invoice-business-block"><div class="invoice-business-details"><div class="invoice-business">${e(b.businessName||'My Store')}</div>${b.owner?`<p>${e(b.owner)}</p>`:''}${b.address?`<p>${e(b.address)}</p>`:''}${b.state?`<p>${e(b.state)}</p>`:''}<p>${[b.phone,b.email].filter(Boolean).map(e).join(' · ')}</p>${b.gstin?`<p><b>GSTIN:</b> ${e(b.gstin)}</p>`:''}</div></div><div><div class="invoice-title">INVOICE</div><p style="text-align:right"><b>${e(inv.number)}</b></p>${inv.demo?'<span class="chip yellow">SAMPLE · NOT FOR USE</span>':''}</div></div><div class="invoice-meta"><div><b>BILL TO</b><p><strong>${e(c.name||'Walk-in customer')}</strong></p>${c.address?`<p>${e(c.address)}</p>`:''}${c.state?`<p>${e(c.state)}</p>`:''}${c.phone?`<p>${e(c.phone)}</p>`:''}${c.gstin?`<p>GSTIN: ${e(c.gstin)}</p>`:''}</div><div style="text-align:right"><b>INVOICE DETAILS</b><p>Date: ${formatDate(inv.date)}</p><p>Payment: ${e(inv.payment)}</p><p>Status: ${invoiceOutstanding(inv,db.accounting.entries)===0?'Paid':invoiceOutstanding(inv,db.accounting.entries)===inv.total?'Unpaid':`Part paid (due ${money(invoiceOutstanding(inv,db.accounting.entries))})`}</p></div></div><div class="table-scroll"><table class="invoice-print-table"><thead><tr><th>Item</th><th>Qty</th><th>Rate</th><th>GST</th><th style="text-align:right">Amount</th></tr></thead><tbody>${inv.lines.map(x=>`<tr><td>${e(x.name)}<div style="font-size:10px;color:#8a99a6">${e(x.sku||'')}</div></td><td>${x.qty} ${e(x.unit)}</td><td>${money(x.unitPrice)}</td><td>${pct(x.gst)}</td><td style="text-align:right">${money(x.total)}</td></tr>`).join('')}</tbody></table></div><div class="invoice-bottom"><div class="invoice-bottom-left">${inv.notes?`<p class="invoice-notes"><strong>Note:</strong> ${e(inv.notes)}</p>`:''}${termsMarkup}</div><div class="invoice-total"><div class="summary-row"><span>Items subtotal ${inv.inclusive?'(incl. GST)':''}</span><b>${money(inv.list)}</b></div>${inv.discount?`<div class="summary-row"><span>Discount (${inv.discountPercent}%)</span><b>− ${money(inv.discount)}</b></div>`:''}<div class="summary-row"><span>Taxable amount</span><b>${money(inv.taxable)}</b></div>${taxLines}<div class="summary-row total"><span>Total</span><b>${money(inv.total)}</b></div></div></div>${upiMarkup}<div class="invoice-footer">${String(b.invoiceThankYou??'Thank you for your business!').trim()?`<div class="invoice-footer-primary">${e(String(b.invoiceThankYou??'Thank you for your business!').trim())}</div>`:''}${String(b.invoiceFooterNote??'Invoice generated with BillNest').trim()?`<div class="invoice-footer-secondary">${e(String(b.invoiceFooterNote??'Invoice generated with BillNest').trim())}</div>`:''}</div></article>`;
 }
 function downloadFile(name,content,mime){const blob=new Blob([content],{type:mime}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),10000)}
 function exportProducts(){const rows=[['SKU','Product','Category','Unit','Selling price INR','Purchase cost INR','Stock','Low stock level','GST percent','Barcode','Expiry date']];db.products.forEach(p=>rows.push([p.sku,p.name,p.category,p.unit,p.price,p.cost,p.stock,p.lowStock,p.gst,p.barcode||'',p.expiryDate||'']));downloadFile(`billnest-products-${today()}.csv`,'\ufeff'+csvEncode(rows),'text/csv;charset=utf-8')}
@@ -827,7 +862,7 @@ function handleAction(action,id){switch(action){
  case 'export-accounting':exportAccounting();break;
  case 'save-invoice':saveInvoice();break;
  case 'view-invoice':ui.invoiceId=id;openModal('invoice');break;
- case 'print-invoice':{const inv=db.invoices.find(i=>i.id===id);if(!inv)return;$('#printLayer').innerHTML=invoicePaper(inv);window.print();break}
+ case 'print-invoice':{const inv=db.invoices.find(i=>i.id===id);if(!inv)return;$('#printLayer').innerHTML=invoicePaper(inv);drawInvoiceUpiQr($('#printLayer'));window.print();break}
  case 'mark-paid':openModal('receipt',id);break
  case 'export-products':exportProducts();break;
  case 'export-invoices':exportInvoices();break;
