@@ -13,12 +13,12 @@
  const attributeOriginals=new WeakMap();
  const blocked='script,style,noscript,textarea,code,pre,[contenteditable],.invoice-paper,.printable-invoice,.picker-product,.mobile-product,.data-table tbody,.cloud-backup-row,.store-meta b,.store-avatar,.billnest-auth-user,.invoice-upi-payment,.invoice-logo-top,.product-avatar,.customer-name';
  const dynamic=[
-  [/^(\\d+) invoices$/,n=>n+' बिल'],
-  [/^(\\d+) items$/,n=>n+' सामान'],
-  [/^(\\d+) in stock$/,n=>n+' स्टॉक में'],
-  [/^Across (\\d+) invoices$/,n=>n+' बिलों में'],
+  [/^(\d+) invoices$/,n=>n+' बिल'],
+  [/^(\d+) items$/,n=>n+' सामान'],
+  [/^(\d+) in stock$/,n=>n+' स्टॉक में'],
+  [/^Across (\d+) invoices$/,n=>n+' बिलों में'],
   [/^Due: (.+)$/,n=>'बकाया: '+n],
-  [/^(\\d+) sold$/,n=>n+' बिके']
+  [/^(\d+) sold$/,n=>n+' बिके']
  ];
  const translated=s=>translations[s]||dynamic.reduce((out,[re,fn])=>out||(re.exec(s)?.[1]?fn(re.exec(s)[1]):''),'')||s;
  const skip=node=>node.parentElement?.closest(blocked);
