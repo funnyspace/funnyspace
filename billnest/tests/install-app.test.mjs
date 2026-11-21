@@ -1,0 +1,44 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync,existsSync} from 'node:fs';
+const root=new URL('../',import.meta.url);
+const read=name=>readFileSync(new URL(name,root),'utf8');
+test('BillNest Android PWA manifest is installable and keeps the correct app scope',()=>{
+ const m=JSON.parse(read('manifest.webmanifest'));
+ assert.equal(m.name,'BillNest Inventory & Billing');
+ assert.equal(m.start_url,'./');
+ assert.equal(m.scope,'./');
+ assert.equal(m.display,'standalone');
+ assert.equal(m.id,'/funnyspace/billnest/');
+ assert.ok(m.icons.some(i=>i.sizes==='192x192'));
+ assert.ok(m.icons.some(i=>i.sizes==='512x512'&&i.purpose==='maskable'));
+ for(const i of m.icons)assert.ok(existsSync(new URL(i.src,root)),i.src);
+});
+test('install banner and offline service worker are wired into the live website',()=>{
+ const html=read('index.html'),js=read('install-app.js'),sw=read('sw.js'),css=read('styles.css');
+ assert.match(html,/rel="manifest"/);
+ assert.match(html,/id="installAppCard"/);
+ assert.match(html,/id="installAppButton"/);
+ assert.match(html,/install-app\.js\?v=25/);
+ assert.match(js,/beforeinstallprompt/);
+ assert.match(js,/serviceWorker\.register\('\.\/sw\.js'/);
+ assert.match(sw,/caches\.open\(CACHE\)/);
+ assert.match(sw,/event\.request|const request=event\.request/);
+ assert.match(sw,/url\.origin!==scope\.origin/);
+ assert.match(sw,/request\.mode==='navigate'/);
+ assert.match(sw,/cloud-backup\.js\?v=23/);
+ assert.match(css,/\.install-app-card:not\(\[hidden\]\)/);
+});
+test('APK wrapper uses HTTPS app URL and hardware permission / system picker',()=>{
+ const java=read('android/app/src/main/java/io/github/funnyspace/billnest/MainActivity.java');
+ const xml=read('android/app/src/main/AndroidManifest.xml');
+ assert.match(java,/https:\/\/funnyspace\.github\.io\/funnyspace\/billnest\//);
+ assert.match(java,/onPermissionRequest/);
+ assert.match(java,/RESOURCE_VIDEO_CAPTURE/);
+ assert.match(java,/ACTION_OPEN_DOCUMENT/);
+ assert.match(java,/PrintManager/);
+ assert.match(java,/\"application\/json\"/);
+ assert.match(java,/isBillNestPage/);
+ assert.match(xml,/android\.permission\.CAMERA/);
+ assert.match(xml,/android\.permission\.INTERNET/);
+});
