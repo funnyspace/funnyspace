@@ -319,3 +319,17 @@
   .page-intro .toolbar-actions .btn[data-action="scan-billing"]{grid-column:auto;min-height:44px;font-size:12px;padding:8px 6px}
   .page-intro .toolbar-actions .btn[data-go="sales"]{min-width:0;min-height:44px;font-size:12px;padding:8px 6px}
 }
+
+/* UPI invoice QR generated locally and printed without third-party images. */
+.upi-billing-hint{margin:0 0 13px;padding:10px 12px;border:1px solid #bbdfd1;background:#edf8f3;color:#155b49;border-radius:10px;font-size:12px;line-height:1.55}
+.invoice-upi-payment{display:flex;flex-direction:column;align-items:center;gap:8px;margin:22px auto 0;padding:17px;border:1px solid #d7e8e2;background:#f7fcfa;border-radius:12px;text-align:center;break-inside:avoid;page-break-inside:avoid}
+.invoice-upi-payment h4{margin:0 0 3px;font-size:15px;color:#163d36}
+.invoice-upi-qr{display:grid;place-items:center;width:208px;height:208px;padding:8px;background:#fff;border:1px solid #d9e3e1;border-radius:8px;font-size:11px;color:#697988}
+.invoice-upi-qr img,.invoice-upi-qr canvas{width:192px!important;height:192px!important;display:block;image-rendering:auto}
+.invoice-upi-amount{font-size:22px;font-weight:800;color:#096b53}
+.invoice-upi-payee{font-size:12px;font-weight:650;overflow-wrap:anywhere}
+.invoice-upi-open{font-size:12px;color:#067a60;text-decoration:underline;overflow-wrap:anywhere}
+.invoice-upi-warning{font-size:10px;line-height:1.5;color:#6b7c89;max-width:380px;margin:0}
+.invoice-modal .modal-footer{flex-wrap:wrap;gap:8px}
+@media(max-width:700px){.invoice-upi-payment{padding:12px;margin-top:16px}.invoice-upi-amount{font-size:20px}}
+@media print{.invoice-upi-payment{background:#fff;break-inside:avoid;page-break-inside:avoid}.invoice-upi-open{display:none!important}.invoice-upi-qr{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
