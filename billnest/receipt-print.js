@@ -64,8 +64,9 @@
   const win=window.open('','_blank','width=480,height=700');
   if(!win){alert(label('Pop-up blocked. Allow pop-ups for BillNest to print receipts.','पॉप-अप अवरुद्ध है। रसीद प्रिंट के लिए पॉप-अप की अनुमति दें।'));return false}
   const pageWidth=paper==='80'?'80mm':'58mm';
+  // Select the matching 58/80 mm roll in the system printer dialog; browsers do not guarantee auto-length @page sizing.
   const css=[
-   '@page{size:'+pageWidth+' auto;margin:0}',
+   '@page{margin:0}',
    '*{box-sizing:border-box}html,body{margin:0;padding:0;background:white;color:black}',
    'body{font:11px/1.35 Arial,"Noto Sans Devanagari",sans-serif}',
    '.r-sheet{width:'+pageWidth+';max-width:'+pageWidth+';padding:2mm 2.5mm;margin:0 auto;overflow-wrap:anywhere}',
