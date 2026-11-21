@@ -305,3 +305,18 @@ test('dashboard has three raised SVG quick actions and inventory supports 30-day
     assert.match(node('#main').innerHTML,/30 days/);
   }finally{globalThis.FormData=oldFormData;clickAction('close-modal')}
 });
+
+test('mobile topbar headings stay left-aligned across all sections',async()=>{
+ const {readFileSync}=await import('node:fs');
+ const css=readFileSync(new URL('../styles.css',import.meta.url),'utf8');
+ const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
+ assert.match(css,/\.topbar \.page-heading\{[^}]*text-align:left/);
+ assert.match(css,/\.topbar \.page-heading h1\{[^}]*text-align:left/);
+ assert.match(css,/\.topbar\{justify-content:flex-start;gap:10px\}/);
+ assert.match(html,/styles\.css\?v=15/);
+ for(const page of ['dashboard','billing','inventory','sales','customers','accounting','reports','settings']){
+  clickGo(page);
+  assert.equal(node('#pageTitle').textContent, {'dashboard':'Dashboard','billing':'Billing','inventory':'Inventory','sales':'Invoices & Sales','customers':'Customers','accounting':'Accounting','reports':'Reports','settings':'Settings'}[page]);
+ }
+ clickGo('dashboard');
+});
