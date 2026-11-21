@@ -17,7 +17,14 @@
   const uuid = () => typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : 'bn-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
   let deviceId = localStorage.getItem(DEVICE_KEY);
   if (!deviceId || !/^[\w-]{12,64}$/.test(deviceId)) {deviceId = uuid();try{localStorage.setItem(DEVICE_KEY,deviceId)}catch{}}
+  // Public project identifiers may be deployed by the site owner. Never embed service_role keys.
+  const deployedConfig = globalThis.BILLNEST_AUTH_CONFIG || {};
   let config = read(CONFIG_KEY) || null;
+  if (deployedConfig.url && deployedConfig.key) {
+    try {
+      config = {url:assertConfig(deployedConfig.url,deployedConfig.key),key:deployedConfig.key,deviceName:config?.deviceName||'My browser'};
+    } catch (err) {console.error('Invalid BillNest public auth configuration',err);config=null}
+  }
   let session = read(SESSION_KEY) || null;
   let workspaceReader = null;
   let restoreHandler = null;
@@ -31,6 +38,10 @@
   let busy = false;
   let inFlight = null;
   let otpEmail = '';
+  let otpTarget = '';
+  let otpChannel = '';
+  const workspaceKey = () => session?.user?.id ? 'billnest-workspace-v1-user-'+session.user.id : 'billnest-workspace-v1';
+  const accountInfo = () => session?.user ? {id:session.user.id,email:session.user.email||'',phone:session.user.phone||''} : null;
   let refreshing = null;
   let lastSync = '';
   let authGeneration = 0;
@@ -62,7 +73,7 @@
     return `<section class="card setting-section cloud-backup-panel" id="cloudBackupPanel" aria-label="Cloud backup settings"><h3>☁ Cloud backup</h3><p>${subtitle}</p><div class="cloud-backup-status" role="status"><span class="cloud-indicator-dot ${connected && online() && state!=='error'?'cloud-online':''}"></span> ${escapeHtml(statusLabel())}</div>${message?`<p class="cloud-message ${state==='error'?'cloud-message-error':''}">${escapeHtml(message)}</p>`:''}
     <form id="cloudConfigForm" class="cloud-small-form"><label for="cloudUrl">Supabase project URL</label><input id="cloudUrl" type="url" name="url" placeholder="https://your-project.supabase.co" value="${escapeHtml(config?.url||'')}" required autocomplete="off"><label for="cloudKey">Publishable (public anon) key</label><input id="cloudKey" name="key" type="text" placeholder="sb_publishable_..." value="${escapeHtml(config?.key||'')}" required autocomplete="off"><label for="cloudDeviceName">Device name</label><input id="cloudDeviceName" name="deviceName" maxlength="60" value="${escapeHtml(deviceName())}" autocomplete="off"><button class="btn btn-sm" type="submit">Save cloud connection</button><p class="mini-note">Never paste a secret, service_role or database password here. Cloud setup requires the SQL table described in the project README.</p></form>
     ${config && !connected ? `<div class="cloud-signin-area"><form id="cloudOtpForm" class="cloud-small-form"><label for="cloudEmail">Email for cloud sign-in</label><input id="cloudEmail" type="email" name="email" value="${escapeHtml(otpEmail)}" placeholder="you@example.com" autocomplete="email" required><button class="btn btn-primary btn-sm" type="submit">Email sign-in code</button></form>${otpEmail?`<form id="cloudVerifyForm" class="cloud-small-form"><label for="cloudToken">6-digit email code</label><input id="cloudToken" name="token" inputmode="numeric" autocomplete="one-time-code" maxlength="12" placeholder="Enter emailed code" required><button class="btn btn-sm" type="submit">Verify & connect</button></form>`:''}</div>`:''}
-    ${connected ? `<p class="mini-note">Signed in as ${escapeHtml(session.user.email || 'your account')}. Each device keeps its own latest backup. Restoring another device’s backup replaces this device’s workspace only after confirmation.</p><div class="cloud-action-row"><button class="btn btn-primary btn-sm" type="button" data-cloud-action="backup">Save to cloud now</button><button class="btn btn-sm" type="button" data-cloud-action="refresh">Refresh backups</button><button class="btn btn-sm" type="button" data-cloud-action="signout">Sign out</button></div>${saved}` : ''}
+    ${connected ? `<p class="mini-note">Signed in as ${escapeHtml(session.user.email || session.user.phone || 'your account')}. Each device keeps its own latest backup. Restoring another device’s backup replaces this device’s workspace only after confirmation.</p><div class="cloud-action-row"><button class="btn btn-primary btn-sm" type="button" data-cloud-action="backup">Save to cloud now</button><button class="btn btn-sm" type="button" data-cloud-action="refresh">Refresh backups</button><button class="btn btn-sm" type="button" data-cloud-action="signout">Sign out</button></div>${saved}` : ''}
     <p class="cloud-privacy-note">Online backup is optional. Your products, invoices, customer details and accounting data are uploaded to your Supabase project only after you connect and sign in. This is backup and manual restore, not automatic merging between devices.</p></section>`;
   }
   function paint() {
@@ -166,25 +177,43 @@
     setMessage('Connection saved. Sign in by email to enable automatic backup.','local');
     if(ready())schedule(250);
   }
+  async function sendOtp(channel, identifier) {
+    if(!config)throw Error('Sign-in is not configured yet. The app owner must connect Supabase first.');
+    if(!['email','phone'].includes(channel))throw Error('Choose email or mobile number.');
+    const target=String(identifier||'').trim();
+    if(channel==='email'&&!validEmail(target))throw Error('Enter a valid email address.');
+    if(channel==='phone'&&!/^\\+[1-9]\\d{7,14}$/.test(target))throw Error('Enter your mobile number with country code, such as +919876543210.');
+    await request('/auth/v1/otp',{method:'POST',body:channel==='email'?{email:target,create_user:true}:{phone:target,create_user:true}});
+    otpChannel=channel;otpTarget=target;
+    setMessage(channel==='email'?'Check your email for the sign-in code.':'Check your mobile for the SMS code.','local');
+    return true;
+  }
+  async function verifyOtp(channel, identifier, code) {
+    const target=String(identifier||'').trim(),token=String(code||'').trim();
+    if(!['email','phone'].includes(channel))throw Error('Select a sign-in method.');
+    if(!/^\\d{6,8}$/.test(token))throw Error('Enter the 6 to 8 digit verification code.');
+    const result=await request('/auth/v1/verify',{method:'POST',body:channel==='email'?{email:target,token,type:'email'}:{phone:target,token,type:'sms'}});
+    if(!result?.access_token||!result?.refresh_token||!result?.user?.id)throw Error('Could not complete sign-in.');
+    session={access_token:result.access_token,refresh_token:result.refresh_token,expiresAt:Date.now()+Number(result.expires_in||3600)*1000,user:result.user};
+    if(!persist(SESSION_KEY,session)) {session=null;throw Error('Unable to save sign-in to this browser.')}
+    otpEmail='';otpTarget='';otpChannel='';authGeneration++;list=[];savedSeq=-1;
+    setMessage('Account connected. Local changes will back up automatically while online.','saved');
+    window.dispatchEvent(new Event('billnest-auth-changed'));
+    return true;
+  }
+  function signOut() {
+    session=null;persist(SESSION_KEY,null);authGeneration++;list=[];pending=false;clearTimeout(timer);
+    setMessage('Signed out. Offline workspace remains on this device.','local');
+    window.dispatchEvent(new Event('billnest-auth-changed'));
+  }
   async function sendEmail(form) {
     const data=new FormData(form),email=String(data.get('email')||'').trim();
     if(!validEmail(email))throw Error('Enter a valid email address.');
-    await request('/auth/v1/otp',{method:'POST',body:{email,create_user:true}});
+    await sendOtp('email',email);
     otpEmail=email;
-    setMessage('Check your email for the sign-in code.','local');
   }
   async function verifyEmail(form) {
-    const token=String(new FormData(form).get('token')||'').trim();
-    if(!/^\d{6,8}$/.test(token))throw Error('Enter the numeric email code.');
-    const result=await request('/auth/v1/verify',{method:'POST',body:{email:otpEmail,token,type:'email'}});
-    if(!result?.access_token||!result?.refresh_token||!result?.user?.id)throw Error('Could not complete sign-in.');
-    session={access_token:result.access_token,refresh_token:result.refresh_token,expiresAt:Date.now()+Number(result.expires_in||3600)*1000,user:result.user};
-    if(!persist(SESSION_KEY,session))throw Error('Could not save secure sign-in session to this browser.');
-    otpEmail='';authGeneration++;
-    setMessage('Cloud backup connected. Local changes will be uploaded automatically while online.','saved');
-    await listBackups();
-    dirtySeq++;
-    schedule(1500);
+    await verifyOtp('email',otpEmail,new FormData(form).get('token'));
   }
   async function handleEvent(event) {
     const form=event.target;
@@ -207,8 +236,8 @@
     if(action==='backup')backupNow().then(ok=>{if(ok){setMessage('Current workspace saved to the cloud.','saved');void listBackups()}}).catch(err=>setMessage(err.message,'error'));
     if(action==='refresh')void listBackups();
     if(action==='signout'){
-      if(!confirm('Sign out of cloud backup on this device? Your local data stays available.'))return;
-      session=null;persist(SESSION_KEY,null);authGeneration++;list=[];pending=false;clearTimeout(timer);setMessage('Signed out. Your local data remains unchanged.','local');
+      if(!confirm('Sign out of BillNest on this device? Your saved data will stay on this device.'))return;
+      signOut();
     }
   });
   window.addEventListener('online',()=>{if(ready()){setMessage('Internet restored. Uploading locally saved changes…','pending');schedule(300)}});
@@ -221,6 +250,12 @@
     onSave:()=>{dirtySeq++;schedule(1800)},
     backupNow,
     isConnected:ready,
-    getStatus:statusLabel
+    getStatus:statusLabel,
+    hasAuthConfig:()=>Boolean(config?.url&&config?.key),
+    currentAccount:accountInfo,
+    workspaceKey,
+    sendOtp,
+    verifyOtp,
+    signOut
   };
 })();
