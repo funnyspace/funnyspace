@@ -108,8 +108,6 @@
 .scanner-preview video{object-fit:contain}
 .scanner-guide{inset:26% 5% 29%;border-radius:8px;box-shadow:0 0 0 110px rgba(0,0,0,.18)}
 .scanner-guide::after{inset:50% 4% auto;opacity:.75}
-.scanner-distance{margin:0 20px 12px;padding:9px 12px;border-radius:9px;border:1px solid #c4e9dc;background:#effaf5;display:flex;flex-direction:column;gap:2px;color:#155f4b;font-size:12px}
-.scanner-distance strong{font-size:13px}.scanner-distance span{color:#416e60;font-size:11px}
 .scanner-optics{display:flex;flex-direction:column;gap:10px;margin:0 20px 12px}
 .scanner-camera-pick,.scanner-zoom{padding:9px 11px;background:#f6f8fa;border:1px solid #e4e8ed;border-radius:10px}
 .scanner-camera-pick label,.scanner-zoom label{font-size:12px;font-weight:760;color:#2c4550}
@@ -120,7 +118,7 @@
 .scanner-actions{gap:7px}.scanner-actions .btn{flex:1 1 85px;min-height:43px}
 .scanner-optics [hidden],#scannerZoomWrap[hidden],#scannerCameraWrap[hidden]{display:none!important}
 @media(max-width:700px){.scanner-preview{max-height:38dvh;min-height:200px}.scanner-guide{inset:29% 5% 30%}.scanner-top{padding-bottom:11px}.scanner-status{margin-top:8px;margin-bottom:10px}}
-@media(max-width:380px){.scanner-actions .btn{flex:1 1 40%;font-size:12px}.scanner-distance{margin-bottom:8px}.scanner-photo-hint{margin-bottom:8px}}
+@media(max-width:380px){.scanner-actions .btn{flex:1 1 40%;font-size:12px}.scanner-photo-hint{margin-bottom:8px}}
 
 /* Store-configured invoice terms appear on the lower-left beside bill totals. */
 .terms-editor{min-height:150px!important;height:auto!important;line-height:1.55;resize:vertical}
@@ -311,9 +309,7 @@
   .scanner-preview{min-height:235px;height:clamp(235px,36dvh,350px)}
 }
 
-/* v19: Hide the close-range instructions and lens picker on mobile.
-   Camera selection remains automatic; the Switch action is preserved. */
+/* Hide the advanced camera selector on mobile, while retaining automatic selection and Switch. */
 @media (max-width:700px){
-  .scanner-distance,
   #scannerCameraWrap{display:none!important}
 }
