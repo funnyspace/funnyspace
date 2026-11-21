@@ -817,7 +817,9 @@ function saveInvoice(){
  for(const line of summary.lines){const p=db.products.find(x=>x.id===line.productId);p.stock-=line.qty;db.movements.push({id:uid(),productId:p.id,change:-line.qty,reason:'Sale '+invoice.number,date:invoice.date,createdAt:invoice.createdAt})}
  db.invoices.push(invoice);db.settings.nextInvoice++;
  if(!save()){db=JSON.parse(prior);return}
- ui.cart=[];ui.discount=0;ui.billingSearch='';ui.billNotes='';ui.invoiceId=invoice.id;ui.modal='invoice';render();toast(`Invoice ${invoice.number} saved. Stock updated.`)
+ ui.cart=[];ui.discount=0;ui.billingSearch='';ui.billNotes='';ui.invoiceId=invoice.id;ui.modal='invoice';render();
+ if(invoice.payment==='UPI')$('#modalLayer')?.querySelector?.('.invoice-upi-payment')?.scrollIntoView?.({behavior:'auto',block:'center'});
+ toast(`Invoice ${invoice.number} saved. Stock updated.`)
 }
 function handleAction(action,id){switch(action){
  case 'add-product':ui.scanCode='';ui.addAfterScan=false;ui.editId=null;openModal('product');break;
