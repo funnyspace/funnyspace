@@ -90,16 +90,95 @@ function summarizeProfit(invoices,products=[],start='0001-01-01') {
   return {sales,recognizedSales,cost,profit:recognizedSales-cost,margin:recognizedSales?((recognizedSales-cost)/recognizedSales*100):null,units,estimatedLines,missingCostLines,productRows};
 }
 
+/** Bookkeeping reports in integer paise. Cashbook is not a statutory double-entry ledger. */
+
+
+const ACCOUNT_TYPES = Object.freeze({
+  expense:'Operating expense', 'other-income':'Other income', 'inventory-purchase':'Inventory purchase',
+  'owner-contribution':'Owner contribution', 'owner-drawing':'Owner drawing', transfer:'Transfer', 'customer-receipt':'Invoice receipt'
+});
+const ACCOUNT_NAMES = Object.freeze({cash:'Cash',bank:'Bank / UPI / Card'});
+const allowed = Object.keys(ACCOUNT_TYPES);
+const asInt = n => Number.isSafeInteger(n) ? n : 0;
+function invoiceOutstanding(invoice, entries=[]) {
+  const total=Math.max(0,asInt(invoice?.total));
+  const receipts=entries.filter(e=>e.type==='customer-receipt'&&e.invoiceId===invoice?.id);
+  const received=receipts.length ? receipts.reduce((s,e)=>s+Math.max(0,asInt(e.amount)),0) : (invoice?.paid ? total : 0);
+  return Math.max(0,total-received);
+}
+function makeAccountingSummary(invoices=[], products=[], accounting={}, from='0001-01-01') {
+  const list=Array.isArray(accounting?.entries)?accounting.entries:[];
+  const cashbook=[];
+  const opening={cash:asInt(accounting?.opening?.cash),bank:asInt(accounting?.opening?.bank)};
+  const running={...opening};
+  const due=[];
+  const customers=new Map();
+  const receiptsByInvoice=new Map();
+  for(const e of list)if(e.type==='customer-receipt')receiptsByInvoice.set(e.invoiceId,(receiptsByInvoice.get(e.invoiceId)||0)+1);
+  for(const inv of invoices){
+    if(!inv||!Number.isSafeInteger(inv.total))continue;
+    const outstanding=invoiceOutstanding(inv,list);
+    if(outstanding>0){
+      due.push({...inv,outstanding});
+      const key=String(inv.customer?.id||inv.customer?.name||'walk-in');
+      const c=customers.get(key)||{id:key,name:String(inv.customer?.name||'Walk-in customer'),outstanding:0,invoices:0};
+      c.outstanding+=outstanding;c.invoices++;customers.set(key,c);
+    }
+    if(inv.paid&&!receiptsByInvoice.get(inv.id)){
+      // Old and pay-at-checkout invoices were settled when created. No manual duplicate entry.
+      const account=inv.payment==='Cash'?'cash':'bank';
+      cashbook.push({id:`sale-${inv.id}`,date:inv.date,createdAt:inv.createdAt||'',account,
+        type:'invoice-sale',label:`Invoice ${String(inv.number||'')} paid`,inflow:inv.total,outflow:0,cash:account==='cash'?inv.total:0,bank:account==='bank'?inv.total:0,auto:true});
+    }
+  }
+  let operatingExpenses=0,otherIncome=0,inventoryPurchases=0;
+  const byCategory=new Map();
+  for(const e of list){
+    if(!e||!allowed.includes(e.type)||!['cash','bank'].includes(e.account)||!Number.isSafeInteger(e.amount)||e.amount<=0)continue;
+    const amount=e.amount;
+    if(e.date>=from){
+      if(e.type==='expense'){
+        operatingExpenses+=amount;
+        const category=String(e.category||'Other expense');byCategory.set(category,(byCategory.get(category)||0)+amount);
+      }
+      if(e.type==='other-income')otherIncome+=amount;
+      if(e.type==='inventory-purchase')inventoryPurchases+=amount;
+    }
+    const income=['other-income','owner-contribution','customer-receipt'].includes(e.type);
+    const transfer=e.type==='transfer';
+    const cash=transfer?(e.account==='cash'?-amount:amount):(e.account==='cash'?(income?amount:-amount):0);
+    const bank=transfer?(e.account==='bank'?-amount:amount):(e.account==='bank'?(income?amount:-amount):0);
+    if(transfer && (e.toAccount===e.account||!['cash','bank'].includes(e.toAccount)))continue;
+    cashbook.push({id:e.id,date:e.date,createdAt:e.createdAt||'',account:e.account,type:e.type,
+      label:String(e.description||ACCOUNT_TYPES[e.type]),inflow:income?amount:0,outflow:income?0:amount,
+      cash,bank,auto:false,invoiceId:e.invoiceId||'',category:e.category||''});
+  }
+  for(const row of cashbook){running.cash+=row.cash;running.bank+=row.bank}
+  const gross=summarizeProfit(invoices,products,from);
+  cashbook.sort((a,b)=>String(b.date||'').localeCompare(String(a.date||''))||String(b.createdAt||'').localeCompare(String(a.createdAt||''))||b.id.localeCompare(a.id));
+  due.sort((a,b)=>String(a.date||'').localeCompare(String(b.date||'')));
+  const debtors=Array.from(customers.values()).sort((a,b)=>b.outstanding-a.outstanding);
+  return {
+    balances:running,opening, cashbook, outstanding:due.reduce((s,i)=>s+i.outstanding,0),unpaidInvoices:due,
+    debtors, otherIncome, operatingExpenses, inventoryPurchases,
+    expenseCategories:Array.from(byCategory.entries()).sort((a,b)=>b[1]-a[1]),
+    gross, netProfit:gross.profit+otherIncome-operatingExpenses,
+    /* Invoices with unknown costs make net profit incomplete. */
+    incomplete: gross.missingCostLines>0, estimated:gross.estimatedLines>0
+  };
+}
+
 const e = escapeHtml;
+
 
 const STORE_KEY = 'billnest-workspace-v1';
 const STATES = ['Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chhattisgarh','Delhi','Goa','Gujarat','Haryana','Himachal Pradesh','Jharkhand','Karnataka','Kerala','Madhya Pradesh','Maharashtra','Manipur','Meghalaya','Mizoram','Nagaland','Odisha','Punjab','Rajasthan','Sikkim','Tamil Nadu','Telangana','Tripura','Uttar Pradesh','Uttarakhand','West Bengal','Andaman and Nicobar Islands','Chandigarh','Dadra and Nagar Haveli and Daman and Diu','Jammu and Kashmir','Ladakh','Lakshadweep','Puducherry'];
 const PAGES = [
- ['dashboard','Dashboard','▦'],['billing','Billing','▧'],['inventory','Inventory','▤'],['sales','Invoices & Sales','▤'],['customers','Customers','♙'],['reports','Reports','▥'],['settings','Settings','⚙']
+ ['dashboard','Dashboard','▦'],['billing','Billing','▧'],['inventory','Inventory','▤'],['sales','Invoices & Sales','▤'],['customers','Customers','♙'],['accounting','Accounting','₹'],['reports','Reports','▥'],['settings','Settings','⚙']
 ];
 const $ = s => document.querySelector(s);
 const uid = () => (globalThis.crypto?.randomUUID ? crypto.randomUUID() : `id-${Date.now()}-${Math.random().toString(36).slice(2)}`);
-const emptyDb = () => ({version:1,demo:false,settings:{businessName:'My Store',owner:'',phone:'',email:'',address:'',state:'',gstin:'',invoicePrefix:'INV',nextInvoice:1,taxMode:'exclusive',termsAndConditions:'',invoiceThankYou:'Thank you for your business!',invoiceFooterNote:'Invoice generated with BillNest',logoDataUrl:'',logoKey:''},logoAssets:{},products:[],customers:[],invoices:[],movements:[]});
+const emptyDb = () => ({version:1,demo:false,settings:{businessName:'My Store',owner:'',phone:'',email:'',address:'',state:'',gstin:'',invoicePrefix:'INV',nextInvoice:1,taxMode:'exclusive',termsAndConditions:'',invoiceThankYou:'Thank you for your business!',invoiceFooterNote:'Invoice generated with BillNest',logoDataUrl:'',logoKey:''},logoAssets:{},products:[],customers:[],invoices:[],movements:[],accounting:{opening:{cash:0,bank:0},entries:[]}});
 const localDay = d => today(d);
 const dateFromDay = day => {const [y,m,d]=day.split('-').map(Number);return new Date(y,m-1,d)};
 const shiftDay = (day,n) => {const d=dateFromDay(day);d.setDate(d.getDate()+n);return localDay(d)};
@@ -117,10 +196,16 @@ function sampleDb(){
  });
  return d;
 }
-function readDb(){try{const raw=localStorage.getItem(STORE_KEY);if(!raw)return sampleDb();const data=JSON.parse(raw);if(!data || data.version!==1 || !Array.isArray(data.products)||!Array.isArray(data.invoices)||!Array.isArray(data.customers))throw Error('Unsupported data');return {...emptyDb(),...data,settings:{...emptyDb().settings,...data.settings}};}catch(err){console.warn('Could not read existing workspace:',err);return emptyDb()}}
+function normaliseAccounting(value){
+ const obj=value&&typeof value==='object'?value:{};
+ const opening=obj.opening&&typeof obj.opening==='object'?obj.opening:{};
+ const valid=value=>Number.isSafeInteger(value)&&Math.abs(value)<=1_000_000_000_00;
+ return {opening:{cash:valid(opening.cash)?opening.cash:0,bank:valid(opening.bank)?opening.bank:0},entries:Array.isArray(obj.entries)?obj.entries.filter(row=>row&&typeof row==='object'&&typeof row.id==='string').slice(0,100000):[]};
+}
+function readDb(){try{const raw=localStorage.getItem(STORE_KEY);if(!raw)return sampleDb();const data=JSON.parse(raw);if(!data || data.version!==1 || !Array.isArray(data.products)||!Array.isArray(data.invoices)||!Array.isArray(data.customers))throw Error('Unsupported data');return {...emptyDb(),...data,settings:{...emptyDb().settings,...data.settings},accounting:normaliseAccounting(data.accounting)};}catch(err){console.warn('Could not read existing workspace:',err);return emptyDb()}}
 let db=readDb();
 const pageFromHash = () => {const page=(globalThis.location?.hash||'').replace(/^#\/?/,'').split('/')[0].toLowerCase();return PAGES.some(p=>p[0]===page)?page:'dashboard'};
-let ui={page:pageFromHash(),search:'',filter:'all',salesSearch:'',customerSearch:'',reportRange:'30',profitRange:'30',profitSearch:'',modal:null,editId:null,cart:[],billingSearch:'',billingCustomer:'',discount:0,payment:'Cash',billNotes:'',invoiceId:null,scanCode:'',addAfterScan:false};
+let ui={page:pageFromHash(),search:'',filter:'all',salesSearch:'',customerSearch:'',reportRange:'30',profitRange:'30',profitSearch:'',accountingRange:'30',accountingSearch:'',modal:null,editId:null,cart:[],billingSearch:'',billingCustomer:'',discount:0,payment:'Cash',billNotes:'',invoiceId:null,scanCode:'',addAfterScan:false};
 let toastTimer;
 const productsMap = () => Object.fromEntries(db.products.map(p=>[p.id,p]));
 const cleanBarcode = code => String(code??'').trim().slice(0,80);
@@ -517,12 +602,12 @@ function showDemoBanner(){return db.demo?`<div class="banner orange"><div><stron
 function render(){
  $('#navigation').innerHTML=PAGES.map(([key,label,icon])=>`<button type="button" data-go="${key}" class="nav-item ${ui.page===key?'active':''} ${key==='settings'?'nav-spacer':''}" ${ui.page===key?'aria-current="page"':''}><span class="nav-icon">${icon}</span><span>${label}</span></button>`).join('');
  const mobileNav=$('#mobileBottomNav');
- if(mobileNav)mobileNav.innerHTML=['dashboard','billing','inventory','sales'].map(key=>{const [name,label,icon]=PAGES.find(p=>p[0]===key);return `<button type="button" data-go="${name}" class="mobile-tab ${ui.page===name?'active':''}" ${ui.page===name?'aria-current="page"':''}><span class="mobile-tab-icon">${icon}</span><span>${label}</span></button>`}).join('');
+ if(mobileNav)mobileNav.innerHTML=['dashboard','billing','inventory','sales','accounting'].map(key=>{const [name,label,icon]=PAGES.find(p=>p[0]===key);const tabLabel=key==='sales'?'Invoices':key==='accounting'?'Accounts':label;return `<button type="button" data-go="${name}" class="mobile-tab ${ui.page===name?'active':''}" ${ui.page===name?'aria-current="page"':''}><span class="mobile-tab-icon">${icon}</span><span>${tabLabel}</span></button>`}).join('');
  $('#breadcrumb').textContent=`WORKSPACE / ${PAGES.find(p=>p[0]===ui.page)?.[1].toUpperCase()}`;
  $('#pageTitle').textContent=PAGES.find(p=>p[0]===ui.page)?.[1]||'Overview';
  $('#storeName').textContent=db.settings.businessName||'My Store';
  $('#storeAvatar').textContent=(db.settings.businessName||'My Store').split(/\s+/).slice(0,2).map(x=>x[0]).join('').toUpperCase();
- const screens={dashboard:renderDashboard,inventory:renderInventory,billing:renderBilling,sales:renderSales,customers:renderCustomers,reports:renderReports,settings:renderSettings};
+ const screens={dashboard:renderDashboard,inventory:renderInventory,billing:renderBilling,sales:renderSales,customers:renderCustomers,accounting:renderAccounting,reports:renderReports,settings:renderSettings};
  try{$('#main').innerHTML=screens[ui.page]()}catch(err){console.error('BillNest screen error:',err);$('#main').innerHTML=`<section class="card section-card" role="alert"><h2>Unable to display this section</h2><p>Please return to Dashboard, or restore your latest backup in Settings.</p><button class="btn btn-primary" data-go="dashboard">Go to Dashboard</button></section>`;}
  if(ui.modal)renderModal();else $('#modalLayer').innerHTML='';
 }
@@ -567,8 +652,9 @@ function renderDashboard(){
  const days=Array.from({length:7},(_,i)=>shiftDay(today(),i-6));const points=days.map(day=>db.invoices.filter(x=>x.date===day).reduce((s,x)=>s+x.total,0));const max=Math.max(...points,1);
  const recent=[...db.invoices].sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).slice(0,5);
  return `${showDemoBanner()}<div class="page-intro"><div><h2>Good to see you 👋</h2><p>Here is what is happening in your store today, ${formatDate(today())}.</p></div><div class="toolbar-actions"><button class="btn" data-go="inventory">Manage stock</button><button class="btn btn-primary" data-go="billing">+ Open Billing</button></div></div>
- <div class="quick-start" role="group" aria-label="Quick actions"><button class="quick-start-action quick-billing" data-go="billing"><span class="quick-start-icon">▧</span><span><b>Billing</b><small>New invoice and checkout</small></span><span class="quick-start-arrow">→</span></button><button class="quick-start-action" data-action="add-product"><span class="quick-start-icon">＋</span><span><b>Add product</b><small>Update inventory</small></span><span class="quick-start-arrow">→</span></button><button class="quick-start-action" data-go="sales"><span class="quick-start-icon">▤</span><span><b>View invoices</b><small>Sales history</small></span><span class="quick-start-arrow">→</span></button></div>
+ <div class="quick-start" role="group" aria-label="Quick actions"><button class="quick-start-action quick-billing" data-go="billing"><span class="quick-start-icon">▧</span><span><b>Billing</b><small>New invoice and checkout</small></span><span class="quick-start-arrow">→</span></button><button class="quick-start-action" data-action="add-product"><span class="quick-start-icon">＋</span><span><b>Add product</b><small>Update inventory</small></span><span class="quick-start-arrow">→</span></button><button class="quick-start-action" data-go="accounting"><span class="quick-start-icon">₹</span><span><b>Accounting</b><small>Expenses and cashbook</small></span><span class="quick-start-arrow">→</span></button></div>
  <div class="grid metric-grid">${metrics.map(([name,value,subtitle,icon,color])=>`<div class="card metric-card"><div class="metric-top">${name}<span class="metric-icon ${color}">${icon}</span></div><div class="metric-value">${value}</div><div class="metric-sub">${subtitle}</div></div>`).join('')}</div>
+ ${renderAccountingShortcut()}
  ${renderProfitDashboard()}
  <div class="section-grid"><section class="card section-card"><div class="section-title"><h3>Sales overview</h3><span class="muted small">Last 7 days</span></div><div class="chart-wrap">${points.map((value,i)=>`<div class="chart-col"><div class="chart-bars"><div class="chart-bar" style="height:${Math.max(2,Math.round(value/max*100))}%" title="${e(days[i])}: ${money(value)}"></div></div><div class="chart-label">${dateFromDay(days[i]).toLocaleDateString('en-IN',{weekday:'short'})}</div></div>`).join('')}</div><p class="mini-note">Daily invoice totals in Indian rupees</p></section>
  <section class="card section-card"><div class="section-title"><h3>Stock alerts</h3><button class="section-link" data-go="inventory">View inventory →</button></div>${low.length?`<div class="alert-list">${low.slice(0,4).map(p=>`<div class="alert-row"><div class="alert-icon">⚠</div><div class="alert-details"><b>${e(p.name)}</b><small>${e(p.sku)} · Reorder at ${p.lowStock}</small></div><span class="chip ${p.stock===0?'red':'yellow'}">${p.stock} left</span></div>`).join('')}</div>${low.length>4?`<p class="mini-note">+${low.length-4} more products need attention</p>`:''}`:empty('✓','All stocked up','No products have reached their low-stock threshold.')}</section></div>
@@ -590,14 +676,51 @@ function renderBilling(){
  <div class="form-grid" style="margin-bottom:14px"><div class="field"><label for="billPayment">Payment method</label><select id="billPayment">${['Cash','UPI','Card','Bank transfer','Credit'].map(x=>`<option ${ui.payment===x?'selected':''}>${x}</option>`).join('')}</select></div><div class="field"><label for="billNotes">Reference / notes</label><input id="billNotes" placeholder="Optional" value="${e(ui.billNotes)}" maxlength="140"></div></div>
  <button class="btn btn-primary btn-block btn-lg" data-action="save-invoice" ${!ui.cart.length||!preview?'disabled':''}>✓ Generate invoice · ${money(preview?.total||0)}</button><p class="mini-note" style="text-align:center">Stock is deducted when you generate the invoice.</p></section></div>`;
 }
-function renderSales(){const q=ui.salesSearch.toLowerCase().trim();const invoices=[...db.invoices].sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).filter(i=>[i.number,i.customer?.name,i.payment].some(x=>String(x||'').toLowerCase().includes(q)));return `${sectionHeader('Sales & invoices','Every generated invoice is stored in this browser.',`<button class="btn" data-action="export-invoices">↓ Export CSV</button><button class="btn btn-primary" data-go="billing">+ New invoice</button>`)}<section class="card card-table"><div class="table-top"><div class="searchbox"><input data-search="sales" type="search" value="${e(ui.salesSearch)}" placeholder="Search invoice or customer..." aria-label="Search invoices"></div><span class="muted small">${invoices.length} invoices</span></div>${invoices.length?`<div class="table-scroll"><table class="data-table"><thead><tr><th>Invoice #</th><th>Customer</th><th>Date</th><th>Payment method</th><th>Payment</th><th>Amount</th><th>Actions</th></tr></thead><tbody>${invoices.map(i=>`<tr><td><strong>${e(i.number)}</strong>${i.demo?'<small class="muted"> (sample)</small>':''}</td><td>${e(i.customer?.name||'Walk-in customer')}</td><td>${formatDate(i.date)}</td><td>${e(i.payment)}</td><td><span class="chip ${i.paid?'green':'yellow'}">${i.paid?'Paid':'Unpaid'}</span></td><td><strong>${money(i.total)}</strong></td><td><button class="btn btn-sm" data-action="view-invoice" data-id="${i.id}">View / Print</button>${!i.paid?` <button class="btn btn-sm" data-action="mark-paid" data-id="${i.id}">Mark paid</button>`:''}</td></tr>`).join('')}</tbody></table></div>`:empty('▧','No invoices found',q?'Try a different search.':'Invoices will appear here after you generate them.',q?'':'Create invoice',q?'':'new-bill')}</section>`}
+function renderSales(){const q=ui.salesSearch.toLowerCase().trim();const invoices=[...db.invoices].sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).filter(i=>[i.number,i.customer?.name,i.payment].some(x=>String(x||'').toLowerCase().includes(q)));return `${sectionHeader('Sales & invoices','Every generated invoice is stored in this browser.',`<button class="btn" data-action="export-invoices">↓ Export CSV</button><button class="btn btn-primary" data-go="billing">+ New invoice</button>`)}<section class="card card-table"><div class="table-top"><div class="searchbox"><input data-search="sales" type="search" value="${e(ui.salesSearch)}" placeholder="Search invoice or customer..." aria-label="Search invoices"></div><span class="muted small">${invoices.length} invoices</span></div>${invoices.length?`<div class="table-scroll"><table class="data-table"><thead><tr><th>Invoice #</th><th>Customer</th><th>Date</th><th>Payment method</th><th>Payment</th><th>Amount</th><th>Actions</th></tr></thead><tbody>${invoices.map(i=>`<tr><td><strong>${e(i.number)}</strong>${i.demo?'<small class="muted"> (sample)</small>':''}</td><td>${e(i.customer?.name||'Walk-in customer')}</td><td>${formatDate(i.date)}</td><td>${e(i.payment)}</td><td><span class="chip ${i.paid?'green':'yellow'}">${invoiceOutstanding(i,db.accounting.entries)===0?'Paid':invoiceOutstanding(i,db.accounting.entries)===i.total?'Unpaid':'Part paid'}</span></td><td><strong>${money(i.total)}</strong>${invoiceOutstanding(i,db.accounting.entries)?`<small class="muted"> Due: ${money(invoiceOutstanding(i,db.accounting.entries))}</small>`:''}</td><td><button class="btn btn-sm" data-action="view-invoice" data-id="${i.id}">View / Print</button>${invoiceOutstanding(i,db.accounting.entries)>0?` <button class="btn btn-sm" data-action="record-receipt" data-id="${i.id}">Receive payment</button>`:''}</td></tr>`).join('')}</tbody></table></div>`:empty('▧','No invoices found',q?'Try a different search.':'Invoices will appear here after you generate them.',q?'':'Create invoice',q?'':'new-bill')}</section>`}
 function renderCustomers(){const q=ui.customerSearch.toLowerCase().trim(),list=db.customers.filter(c=>[c.name,c.phone,c.email,c.state].some(v=>String(v||'').toLowerCase().includes(q)));return `${sectionHeader('Customers','Keep customer details ready for faster billing.',`<button class="btn btn-primary" data-action="add-customer">+ Add customer</button>`)}<section class="card card-table"><div class="table-top"><div class="searchbox"><input data-search="customers" type="search" value="${e(ui.customerSearch)}" placeholder="Search customers..." aria-label="Search customers"></div><span class="muted small">${list.length} customers</span></div>${list.length?`<div class="table-scroll"><table class="data-table"><thead><tr><th>Customer</th><th>Phone</th><th>State</th><th>Invoices</th><th>Actions</th></tr></thead><tbody>${list.map((c,i)=>`<tr><td><div class="product-cell">${productAvatar(c,i)}<div><strong>${e(c.name)}</strong><small>${e(c.email||'Individual / business')}</small></div></div></td><td>${e(c.phone||'Not provided')}</td><td>${e(c.state||'Not set')}</td><td>${db.invoices.filter(x=>x.customer?.id===c.id).length}</td><td><button class="btn btn-sm" data-action="edit-customer" data-id="${c.id}">Edit</button></td></tr>`).join('')}</tbody></table></div>`:empty('♙','No customers found',q?'Try another name or phone.':'Add customers so you can quickly select them when billing.',q?'':'Add customer',q?'':'add-customer')}</section>`}
+// Accounting is a cashbook plus an indicative P&L, not a full double-entry ledger.
+const accountingFrom = () => ui.accountingRange==='all'?'0001-01-01':shiftDay(today(),-Number(ui.accountingRange)+1);
+const accountingStats = () => makeAccountingSummary(db.invoices,db.products,db.accounting,accountingFrom());
+const signedMoney = amount => `${amount<0?'− ':''}${money(Math.abs(amount))}`;
+function renderAccountingShortcut(){
+ const report=makeAccountingSummary(db.invoices,db.products,db.accounting,shiftDay(today(),-29));
+ return `<section class="card accounting-dashboard-strip" aria-label="Accounting summary"><div><small>Estimated net profit · last 30 days</small><strong class="${report.netProfit<0?'accounting-negative':'accounting-positive'}">${signedMoney(report.netProfit)}</strong><span>Gross profit + other income − operating expenses${report.incomplete?' · incomplete costs':''}</span></div><div><small>Customer outstanding</small><strong>${money(report.outstanding)}</strong><span>${report.unpaidInvoices.length} invoices with balance due</span></div><button class="btn btn-sm" data-go="accounting">Open accounting →</button></section>`;
+}
+function renderAccounting(){
+ const stat=accountingStats();
+ const from=accountingFrom(), label=ui.accountingRange==='all'?'all dates':`last ${ui.accountingRange} days`;
+ const query=ui.accountingSearch.trim().toLowerCase();
+ const rows=stat.cashbook.filter(row=>row.date>=from&&(!query||[row.label,row.type,row.category,row.invoiceId].some(v=>String(v||'').toLowerCase().includes(query))));
+ const cashflow=rows.reduce((sum,row)=>sum+row.cash+row.bank,0);
+ const cards=[
+  ['Cash balance',signedMoney(stat.balances.cash),'Opening + recorded cash movements'],
+  ['Bank / UPI balance',signedMoney(stat.balances.bank),'UPI and card receipts included'],
+  ['Outstanding from customers',money(stat.outstanding),`${stat.unpaidInvoices.length} invoices with balance due`],
+  ['Operating expenses',money(stat.operatingExpenses),`Recorded in ${label}`],
+  ['Other income',money(stat.otherIncome),'Excludes invoiced sales'],
+  ['Estimated net profit / loss',signedMoney(stat.netProfit),`Invoiced gross profit + other income − expenses (${label})`]
+ ];
+ const expenseRows=stat.expenseCategories.slice(0,5);
+ return `${showDemoBanner()}${sectionHeader('Accounting & cashbook','Track cash, bank, shop expenses and customer dues alongside your invoices.',`<button type="button" class="btn" data-action="opening-balances">Opening balances</button><button type="button" class="btn btn-primary" data-action="add-accounting">+ New transaction</button>`)}
+ <div class="accounting-toolbar"><label for="accountingRange">Reporting period</label><select id="accountingRange" class="select-input" aria-label="Accounting date range">${[['7','Last 7 days'],['30','Last 30 days'],['90','Last 90 days'],['all','All time']].map(([key,text])=>`<option value="${key}" ${ui.accountingRange===key?'selected':''}>${text}</option>`).join('')}</select><span class="accounting-period-hint">Balances and outstanding invoices are always current; P/L and transactions use the selected period.</span></div>
+ <div class="accounting-card-grid">${cards.map(([title,value,hint])=>`<section class="card accounting-metric"><span>${title}</span><strong>${value}</strong><small>${hint}</small></section>`).join('')}</div>
+ ${stat.incomplete?`<p class="accounting-warning" role="status">Some invoice items have unknown purchase costs. Net profit is incomplete. Add their purchase costs in Inventory.</p>`:''}
+ ${stat.estimated?`<p class="accounting-warning">Older invoices without cost snapshots use current product purchase costs, so their profit is estimated.</p>`:''}
+ <div class="accounting-two-col"><section class="card accounting-block"><div class="section-title"><h3>Customer receivables</h3><span class="muted small">${money(stat.outstanding)} due</span></div>
+ ${stat.unpaidInvoices.length?`<div class="table-scroll"><table class="data-table"><thead><tr><th>Invoice</th><th>Customer</th><th>Due</th><th></th></tr></thead><tbody>${stat.unpaidInvoices.map(inv=>`<tr><td><strong>${e(inv.number)}</strong><small>${formatDate(inv.date)}</small></td><td>${e(inv.customer?.name||'Walk-in customer')}</td><td>${money(inv.outstanding)}</td><td><button class="btn btn-sm" data-action="record-receipt" data-id="${e(inv.id)}">Receive</button></td></tr>`).join('')}</tbody></table></div>`:empty('✓','No pending payments','All recorded invoices are settled.')}
+ </section><section class="card accounting-block"><div class="section-title"><h3>Operating expenses by category</h3></div>${expenseRows.length?expenseRows.map(([category,amount])=>`<div class="accounting-category-row"><span>${e(category)}</span><strong>${money(amount)}</strong></div>`).join(''):empty('▤','No expenses recorded','Record rent, transport, salary or other shop costs.')}
+ <p class="mini-note">Inventory purchases, transfers and owner drawings affect money balances, not operating profit.</p></section></div>
+ <section class="card accounting-block accounting-ledger"><div class="section-title"><div><h3>Cashbook</h3><p class="mini-note">${rows.length} movements · ${label} · cashflow ${signedMoney(cashflow)}</p></div><div class="accounting-ledger-actions"><input class="accounting-search" type="search" data-search="accounting" aria-label="Search transactions" value="${e(ui.accountingSearch)}" placeholder="Search transactions"><button class="btn btn-sm" data-action="export-accounting">↓ CSV</button></div></div>
+ ${rows.length?`<div class="table-scroll"><table class="data-table"><thead><tr><th>Date</th><th>Details</th><th>Account</th><th>Cash change</th><th>Bank change</th><th></th></tr></thead><tbody>${rows.map(r=>`<tr><td>${formatDate(r.date)}</td><td><strong>${e(r.label)}</strong><small>${e(ACCOUNT_TYPES[r.type]||'Invoice payment')}</small></td><td>${e(r.account==='cash'?'Cash':'Bank / UPI')}</td><td class="${r.cash<0?'accounting-negative':'accounting-positive'}">${r.cash?signedMoney(r.cash):'—'}</td><td class="${r.bank<0?'accounting-negative':'accounting-positive'}">${r.bank?signedMoney(r.bank):'—'}</td><td>${r.auto?'Auto':`<button class="btn btn-sm" data-action="delete-accounting" data-id="${e(r.id)}" aria-label="Delete transaction">Delete</button>`}</td></tr>`).join('')}</tbody></table></div>`:empty('▥','No cashbook entries found','Try another period or record an expense or receipt.')}
+ <p class="accounting-note">Cashbook balances include invoices marked paid (older invoices assumed received in their original payment method), manual transactions and opening balances. Outstanding and profit are calculated separately.  Do not record a paid invoice again as other income.</p></section>
+ <p class="accounting-note accounting-final-note"><strong>About this report:</strong> Estimated net profit = invoiced gross profit (sales excluding GST minus cost of goods sold) + other income − recorded operating expenses. It is not a statutory financial statement. GST, depreciation, loans, supplier payables, refunds, and other accounting adjustments are not fully handled. Inventory purchase payments do not automatically add stock; record stock changes separately in Inventory. Data stays in this browser unless exported.</p>`;
+}
 function renderReports(){const start=reportDateRange(),inv=db.invoices.filter(x=>x.date>=start),sales=inv.reduce((s,i)=>s+i.total,0),tax=inv.reduce((s,i)=>s+i.tax,0),count=inv.length,avg=count?Math.round(sales/count):0;
  const payments={};inv.forEach(i=>{payments[i.payment]=(payments[i.payment]||0)+i.total});
  const prod={}; inv.forEach(i=>i.lines.forEach(line=>{const item=prod[line.name] ||= {name:line.name,qty:0,total:0};item.qty+=line.qty;item.total+=line.total}));const best=Object.values(prod).sort((a,b)=>b.qty-a.qty).slice(0,6);const topSales=Math.max(...Object.values(payments),1),topQty=Math.max(...best.map(i=>i.qty),1);
  return `${sectionHeader('Business reports','Simple insights to help you make decisions.',`<select class="select-input" id="reportRange" aria-label="Date range"><option value="7" ${ui.reportRange==='7'?'selected':''}>Last 7 days</option><option value="30" ${ui.reportRange==='30'?'selected':''}>Last 30 days</option><option value="90" ${ui.reportRange==='90'?'selected':''}>Last 90 days</option><option value="all" ${ui.reportRange==='all'?'selected':''}>All time</option></select><button class="btn" data-action="export-invoices">↓ Export sales</button>`)}<div class="grid report-grid">${[['Total sales',money(sales)],['Invoices issued',count],['GST on sales',money(tax)],['Average invoice',money(avg)],['Unpaid invoices',inv.filter(i=>!i.paid).length],['Inventory at cost',money(db.products.reduce((s,p)=>s+toPaise(p.cost)*p.stock,0))]].map(([label,value])=>`<div class="card report-card"><div class="overline">${label}</div><div class="metric-value">${value}</div></div>`).join('')}</div><div class="report-layout"><section class="card section-card"><div class="section-title"><h3>Sales by payment method</h3></div>${Object.keys(payments).length?Object.entries(payments).sort((a,b)=>b[1]-a[1]).map(([name,value])=>`<div class="stat-line"><div class="stat-name">${e(name)}</div><div class="progress-track"><div class="progress-fill" style="width:${Math.max(2,value/topSales*100)}%"></div></div><span class="stat-number">${money(value)}</span></div>`).join(''):empty('▥','No sales in this period','Try selecting a longer date range.')}</section><section class="card section-card"><div class="section-title"><h3>Best-selling products</h3><span class="muted small">Units sold</span></div>${best.length?best.map(x=>`<div class="stat-line"><div class="stat-name" title="${e(x.name)}" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${e(x.name)}</div><div class="progress-track"><div class="progress-fill" style="width:${x.qty/topQty*100}%"></div></div><span class="stat-number">${x.qty} sold</span></div>`).join(''):empty('▤','No products sold yet','Create an invoice to see what sells best.')}</section></div>`;
 }
-function renderSettings(){const s=db.settings;return `${sectionHeader('Store settings','Personalise your invoices and manage your data.')}<div class="settings-grid"><div><section class="card setting-section"><h3>Business details</h3><p>This information appears on every new invoice.</p><form id="settingsForm"><div class="business-logo-uploader"><div id="businessLogoPreview" class="business-logo-preview">${logoMarkup(effectiveLogo(),'business-logo-preview-image')||'<span class="business-logo-placeholder" aria-hidden="true">▣</span>'}</div><div class="business-logo-controls"><label for="businessLogoFile">Business logo</label><span>Displayed beside your shop name on invoices and saved PDFs. Use PNG, JPG or WebP, up to 4 MB.</span><div class="business-logo-buttons"><label for="businessLogoFile" class="btn btn-sm business-logo-upload">↑ Upload logo</label><button id="removeBusinessLogo" type="button" class="btn btn-sm" data-action="remove-business-logo" ${safeLogoUrl(effectiveLogo())?'':'hidden'}>Remove logo</button></div><input id="businessLogoFile" type="file" accept="image/png,image/jpeg,image/webp" class="business-logo-file" aria-label="Choose business logo"><small id="businessLogoState" class="field-hint" aria-live="polite">${pendingLogo!==null?'New logo selected. Click Save settings to apply.':'Logo is saved with your business details.'}</small></div></div><div class="form-grid">${field('Business / shop name','businessName',s.businessName,'text','required maxlength="80"')}${field('Owner / contact name','owner',s.owner,'text','maxlength="80"')}${field('Phone number','phone',s.phone,'tel','maxlength="25"')}${field('Email address','email',s.email,'email','maxlength="100"')}${field('GSTIN (optional)','gstin',s.gstin,'text','maxlength="15" style="text-transform:uppercase"')}<div class="field"><label for="state">Business state / UT</label><select name="state" id="state">${stateOptions(s.state)}</select></div><div class="field full"><label for="address">Business address</label><textarea id="address" name="address" maxlength="240">${e(s.address)}</textarea></div></div><div class="thin-line"></div><h3>Billing preferences</h3><p>Choose how prices are stored. This affects GST calculations on new invoices.</p><div class="form-grid"><div class="field"><label for="invoicePrefix">Invoice prefix</label><input id="invoicePrefix" name="invoicePrefix" value="${e(s.invoicePrefix)}" maxlength="12" required></div><div class="field"><label for="taxMode">Product price includes GST?</label><select id="taxMode" name="taxMode"><option value="exclusive" ${s.taxMode==='exclusive'?'selected':''}>No, add GST</option><option value="inclusive" ${s.taxMode==='inclusive'?'selected':''}>Yes, GST included</option></select></div></div><p class="mini-note">Next invoice: ${e(s.invoicePrefix)}-${String(s.nextInvoice).padStart(4,'0')}. GST rates must be verified for each product.</p><div class="thin-line"></div><h3>Invoice Terms &amp; Conditions</h3><p class="settings-term-help">Write the terms you want customers to see. They will appear at the bottom-left of each new bill. Leave this blank to hide the section.</p><div class="field"><label for="termsAndConditions">Terms &amp; Conditions</label><textarea id="termsAndConditions" name="termsAndConditions" class="terms-editor" rows="6" maxlength="2000" placeholder="Example: Goods once sold may be returned within 7 days with the original receipt.">${e(s.termsAndConditions||'')}</textarea><span class="field-hint">Maximum 2,000 characters. Line breaks are preserved. Existing invoices keep the terms saved when they were issued.</span></div><div class="thin-line"></div><h3>Invoice footer message</h3><p class="settings-term-help">Customise the two lines shown below the bill. Leave either field empty to hide that line.</p><div class="field"><label for="invoiceThankYou">Thank-you message</label><input id="invoiceThankYou" name="invoiceThankYou" maxlength="160" placeholder="Thank you for your business!" value="${e(s.invoiceThankYou??'Thank you for your business!')}"></div><div class="field" style="margin-top:12px"><label for="invoiceFooterNote">Second footer line</label><input id="invoiceFooterNote" name="invoiceFooterNote" maxlength="200" placeholder="Invoice generated with BillNest" value="${e(s.invoiceFooterNote??'Invoice generated with BillNest')}"></div><span class="field-hint">These messages are saved on new invoices. Previously issued invoices are not changed.</span><div style="margin-top:22px"><button class="btn btn-primary" type="submit">Save settings</button></div></form></section></div><div><section class="card setting-section"><h3>Data & backup</h3><p>Your store data lives in this browser. It does not automatically sync across devices or to GitHub.</p><div class="help-row"><div class="help-icon">↓</div><div style="flex:1"><b>Download backup</b><p>Save your products, customers, stock movements and invoices as a JSON file.</p><button class="btn btn-sm" style="margin-top:10px" data-action="backup">Download JSON</button></div></div><div class="help-row"><div class="help-icon">↑</div><div style="flex:1"><b>Restore backup</b><p>Replaces the current browser workspace with a backup file.</p><button class="btn btn-sm" style="margin-top:10px" data-action="choose-import">Import JSON</button><input id="importFile" type="file" accept=".json,application/json" hidden></div></div><div class="thin-line"></div><div class="help-row"><div class="help-icon" style="background:#fff1ee;color:#c15a4d">!</div><div style="flex:1"><b>Reset workspace</b><p>Erase this browser's current store data. Export a backup first.</p><button class="btn btn-danger btn-sm" style="margin-top:10px" data-action="reset-data">Clear all data</button></div></div></section><section class="card setting-section" style="margin-top:18px"><h3>Before using real invoices</h3><p>Confirm your GST registration, product HSN/SAC, applicable tax rates, invoice particulars and local compliance requirements with a qualified tax professional. This is a starter billing app, not certified GST software.</p><span class="chip green">✓ No external libraries required</span></section></div></div>`}
+function renderSettings(){const s=db.settings;return `${sectionHeader('Store settings','Personalise your invoices and manage your data.')}<div class="settings-grid"><div><section class="card setting-section"><h3>Business details</h3><p>This information appears on every new invoice.</p><form id="settingsForm"><div class="business-logo-uploader"><div id="businessLogoPreview" class="business-logo-preview">${logoMarkup(effectiveLogo(),'business-logo-preview-image')||'<span class="business-logo-placeholder" aria-hidden="true">▣</span>'}</div><div class="business-logo-controls"><label for="businessLogoFile">Business logo</label><span>Displayed beside your shop name on invoices and saved PDFs. Use PNG, JPG or WebP, up to 4 MB.</span><div class="business-logo-buttons"><label for="businessLogoFile" class="btn btn-sm business-logo-upload">↑ Upload logo</label><button id="removeBusinessLogo" type="button" class="btn btn-sm" data-action="remove-business-logo" ${safeLogoUrl(effectiveLogo())?'':'hidden'}>Remove logo</button></div><input id="businessLogoFile" type="file" accept="image/png,image/jpeg,image/webp" class="business-logo-file" aria-label="Choose business logo"><small id="businessLogoState" class="field-hint" aria-live="polite">${pendingLogo!==null?'New logo selected. Click Save settings to apply.':'Logo is saved with your business details.'}</small></div></div><div class="form-grid">${field('Business / shop name','businessName',s.businessName,'text','required maxlength="80"')}${field('Owner / contact name','owner',s.owner,'text','maxlength="80"')}${field('Phone number','phone',s.phone,'tel','maxlength="25"')}${field('Email address','email',s.email,'email','maxlength="100"')}${field('GSTIN (optional)','gstin',s.gstin,'text','maxlength="15" style="text-transform:uppercase"')}<div class="field"><label for="state">Business state / UT</label><select name="state" id="state">${stateOptions(s.state)}</select></div><div class="field full"><label for="address">Business address</label><textarea id="address" name="address" maxlength="240">${e(s.address)}</textarea></div></div><div class="thin-line"></div><h3>Billing preferences</h3><p>Choose how prices are stored. This affects GST calculations on new invoices.</p><div class="form-grid"><div class="field"><label for="invoicePrefix">Invoice prefix</label><input id="invoicePrefix" name="invoicePrefix" value="${e(s.invoicePrefix)}" maxlength="12" required></div><div class="field"><label for="taxMode">Product price includes GST?</label><select id="taxMode" name="taxMode"><option value="exclusive" ${s.taxMode==='exclusive'?'selected':''}>No, add GST</option><option value="inclusive" ${s.taxMode==='inclusive'?'selected':''}>Yes, GST included</option></select></div></div><p class="mini-note">Next invoice: ${e(s.invoicePrefix)}-${String(s.nextInvoice).padStart(4,'0')}. GST rates must be verified for each product.</p><div class="thin-line"></div><h3>Invoice Terms &amp; Conditions</h3><p class="settings-term-help">Write the terms you want customers to see. They will appear at the bottom-left of each new bill. Leave this blank to hide the section.</p><div class="field"><label for="termsAndConditions">Terms &amp; Conditions</label><textarea id="termsAndConditions" name="termsAndConditions" class="terms-editor" rows="6" maxlength="2000" placeholder="Example: Goods once sold may be returned within 7 days with the original receipt.">${e(s.termsAndConditions||'')}</textarea><span class="field-hint">Maximum 2,000 characters. Line breaks are preserved. Existing invoices keep the terms saved when they were issued.</span></div><div class="thin-line"></div><h3>Invoice footer message</h3><p class="settings-term-help">Customise the two lines shown below the bill. Leave either field empty to hide that line.</p><div class="field"><label for="invoiceThankYou">Thank-you message</label><input id="invoiceThankYou" name="invoiceThankYou" maxlength="160" placeholder="Thank you for your business!" value="${e(s.invoiceThankYou??'Thank you for your business!')}"></div><div class="field" style="margin-top:12px"><label for="invoiceFooterNote">Second footer line</label><input id="invoiceFooterNote" name="invoiceFooterNote" maxlength="200" placeholder="Invoice generated with BillNest" value="${e(s.invoiceFooterNote??'Invoice generated with BillNest')}"></div><span class="field-hint">These messages are saved on new invoices. Previously issued invoices are not changed.</span><div style="margin-top:22px"><button class="btn btn-primary" type="submit">Save settings</button></div></form></section></div><div><section class="card setting-section"><h3>Data & backup</h3><p>Your store data lives in this browser. It does not automatically sync across devices or to GitHub.</p><div class="help-row"><div class="help-icon">↓</div><div style="flex:1"><b>Download backup</b><p>Save products, customers, stock movements, invoices, accounting transactions and opening balances as JSON.</p><button class="btn btn-sm" style="margin-top:10px" data-action="backup">Download JSON</button></div></div><div class="help-row"><div class="help-icon">↑</div><div style="flex:1"><b>Restore backup</b><p>Replaces the current browser workspace with a backup file.</p><button class="btn btn-sm" style="margin-top:10px" data-action="choose-import">Import JSON</button><input id="importFile" type="file" accept=".json,application/json" hidden></div></div><div class="thin-line"></div><div class="help-row"><div class="help-icon" style="background:#fff1ee;color:#c15a4d">!</div><div style="flex:1"><b>Reset workspace</b><p>Erase this browser's current store and accounting data. Export a backup first.</p><button class="btn btn-danger btn-sm" style="margin-top:10px" data-action="reset-data">Clear all data</button></div></div></section><section class="card setting-section" style="margin-top:18px"><h3>Before using real invoices</h3><p>Confirm your GST registration, product HSN/SAC, applicable tax rates, invoice particulars and local compliance requirements with a qualified tax professional. This is a starter billing app, not certified GST software.</p><span class="chip green">✓ No external libraries required</span></section></div></div>`}
 function openModal(type,id=null){ui.modal=type;ui.editId=id;renderModal()}
 function closeModal(){ui.modal=null;ui.editId=null;ui.scanCode='';ui.addAfterScan=false;$('#modalLayer').innerHTML=''}
 function shellModal(title,desc,body,footer='',cls=''){return `<div class="modal-overlay" role="presentation"><div class="modal ${cls}" role="dialog" aria-modal="true" aria-label="${e(title)}"><div class="modal-header"><div><h2>${title}</h2><p>${desc}</p></div><button type="button" class="modal-x" data-action="close-modal" aria-label="Close">×</button></div>${body}${footer?`<div class="modal-footer">${footer}</div>`:''}</div></div>`}
@@ -614,6 +737,27 @@ function renderModal(){let h='';
  const p=db.products.find(x=>x.id===ui.editId);if(!p)return closeModal();
  h=shellModal('Update stock',`${p.name} · Current quantity ${p.stock}`,`<form id="stockForm"><div class="modal-body"><div class="field"><label for="stockMode">Stock update</label><select id="stockMode" name="mode"><option value="add">Stock received (+)</option><option value="set">Set exact available stock</option></select></div><div class="field" style="margin-top:14px"><label for="stockQty">Quantity *</label><input id="stockQty" name="quantity" type="number" min="0" step="1" required placeholder="Enter quantity"></div><div class="field" style="margin-top:14px"><label for="stockReason">Note (optional)</label><input id="stockReason" name="reason" maxlength="120" placeholder="Supplier delivery, stock count, damage..."></div></div><div class="modal-footer"><button type="button" class="btn" data-action="close-modal">Cancel</button><button class="btn btn-primary" type="submit">Update stock</button></div></form>`,'','small-modal');
  }
+ if(ui.modal==='accounting'){
+  const type=Object.keys(ACCOUNT_TYPES).filter(type=>type!=='customer-receipt');
+  const current=type.includes(ui.editId)?ui.editId:'expense';
+  h=shellModal('New accounting transaction','Record business movements in cash or bank. Invoiced sales are automatic.',`<form id="accountingForm"><div class="modal-body"><div class="form-grid">
+   <div class="field"><label for="bookType">Transaction type</label><select id="bookType" name="type">${type.map(key=>`<option value="${key}" ${current===key?'selected':''}>${e(ACCOUNT_TYPES[key])}</option>`).join('')}</select></div>
+   ${field('Date','date',today(),'date','required')}
+   ${field('Amount (INR)','amount','','number','required min="0.01" step="0.01" max="9999999"')}
+   <div class="field"><label for="bookAccount">Paid from / received in</label><select id="bookAccount" name="account"><option value="cash">Cash</option><option value="bank">Bank / UPI / Card</option></select></div>
+   <div class="field"><label for="bookToAccount">Transfer destination (transfers only)</label><select id="bookToAccount" name="toAccount"><option value="bank">Bank / UPI</option><option value="cash">Cash</option></select></div>
+   ${field('Category','category',current==='expense'?'Rent / Utilities / Travel / Salary':'','text','maxlength="60"')}
+   <div class="field full">${field('Description','description','','text','required maxlength="140"')}</div>
+   </div><p class="accounting-note">Stock purchases reduce cash/bank but are not counted as operating expenses, because the cost of sold inventory is already used in gross profit. Update stock separately in Inventory.</p></div><div class="modal-footer"><button class="btn" type="button" data-action="close-modal">Cancel</button><button type="submit" class="btn btn-primary">Save transaction</button></div></form>`,'small-modal');
+ }
+ if(ui.modal==='opening'){
+  h=shellModal('Opening balances','Balances before transactions and invoices already in this BillNest workspace.',`<form id="openingForm"><div class="modal-body"><p class="accounting-note">Enter opening amounts once. Recorded paid invoices and cashbook transactions will be added on top, so do not enter a current closing balance.</p><div class="form-grid">${field('Opening cash (INR)','cash',rupees(db.accounting.opening.cash),'number','required min="0" step="0.01"')}${field('Opening bank (INR)','bank',rupees(db.accounting.opening.bank),'number','required min="0" step="0.01"')}</div></div><div class="modal-footer"><button class="btn" type="button" data-action="close-modal">Cancel</button><button type="submit" class="btn btn-primary">Save balances</button></div></form>`,'small-modal');
+ }
+ if(ui.modal==='receipt'){
+  const inv=db.invoices.find(x=>x.id===ui.editId),due=inv?invoiceOutstanding(inv,db.accounting.entries):0;
+  if(!inv||due<=0)return closeModal();
+  h=shellModal('Receive invoice payment',`${e(inv.number)} · Outstanding ${money(due)}`,`<form id="receiptForm"><div class="modal-body"><p>Customer: <b>${e(inv.customer?.name||'Walk-in customer')}</b></p><div class="form-grid">${field('Amount received (INR)','amount',rupees(due).toFixed(2),'number',`required min="0.01" max="${rupees(due).toFixed(2)}" step="0.01"`)}${field('Payment date','date',today(),'date','required')}<div class="field"><label for="receiptAccount">Received in</label><select id="receiptAccount" name="account"><option value="cash" ${inv.payment==='Cash'?'selected':''}>Cash</option><option value="bank" ${inv.payment!=='Cash'?'selected':''}>Bank / UPI / Card</option></select></div>${field('Payment reference','description','','text','maxlength="140"')}</div></div><div class="modal-footer"><button class="btn" type="button" data-action="close-modal">Cancel</button><button class="btn btn-primary" type="submit">Save payment</button></div></form>`,'small-modal');
+ }
  if(ui.modal==='invoice'){
  const inv=db.invoices.find(x=>x.id===ui.invoiceId);if(!inv)return closeModal();
  h=shellModal(`Invoice ${e(inv.number)}`,`${formatDate(inv.date)} · ${inv.paid?'Paid':'Unpaid'}`,`<div class="modal-body">${invoicePaper(inv)}</div>`,`<button class="btn" data-action="close-modal">Close</button><button class="btn btn-primary" data-action="print-invoice" data-id="${inv.id}">▤ Print / Save as PDF</button>`,'invoice-modal');
@@ -625,10 +769,16 @@ function invoicePaper(inv){const b=inv.business||db.settings,c=inv.customer||{};
  const printedTerms=String(b.termsAndConditions||'').trim();
  const termsMarkup=printedTerms?`<section class="invoice-terms" aria-label="Invoice terms and conditions"><h4>Terms &amp; Conditions</h4><p>${e(printedTerms)}</p></section>`:'';
  let taxLines = inv.taxType==='intra' ? `<div class="summary-row"><span>CGST</span><b>${money(inv.cgst)}</b></div><div class="summary-row"><span>SGST</span><b>${money(inv.sgst)}</b></div>`:inv.taxType==='inter'?`<div class="summary-row"><span>IGST</span><b>${money(inv.igst)}</b></div>`:`<div class="summary-row"><span>GST (split not specified)</span><b>${money(inv.tax)}</b></div>`;
- return `<article class="invoice-paper printable-invoice">${resolveBusinessLogo(b)?`<div class="invoice-logo-top">${logoMarkup(resolveBusinessLogo(b))}</div>`:''}<div class="invoice-head"><div class="invoice-business-block"><div class="invoice-business-details"><div class="invoice-business">${e(b.businessName||'My Store')}</div>${b.owner?`<p>${e(b.owner)}</p>`:''}${b.address?`<p>${e(b.address)}</p>`:''}${b.state?`<p>${e(b.state)}</p>`:''}<p>${[b.phone,b.email].filter(Boolean).map(e).join(' · ')}</p>${b.gstin?`<p><b>GSTIN:</b> ${e(b.gstin)}</p>`:''}</div></div><div><div class="invoice-title">INVOICE</div><p style="text-align:right"><b>${e(inv.number)}</b></p>${inv.demo?'<span class="chip yellow">SAMPLE · NOT FOR USE</span>':''}</div></div><div class="invoice-meta"><div><b>BILL TO</b><p><strong>${e(c.name||'Walk-in customer')}</strong></p>${c.address?`<p>${e(c.address)}</p>`:''}${c.state?`<p>${e(c.state)}</p>`:''}${c.phone?`<p>${e(c.phone)}</p>`:''}${c.gstin?`<p>GSTIN: ${e(c.gstin)}</p>`:''}</div><div style="text-align:right"><b>INVOICE DETAILS</b><p>Date: ${formatDate(inv.date)}</p><p>Payment: ${e(inv.payment)}</p><p>Status: ${inv.paid?'Paid':'Unpaid'}</p></div></div><div class="table-scroll"><table class="invoice-print-table"><thead><tr><th>Item</th><th>Qty</th><th>Rate</th><th>GST</th><th style="text-align:right">Amount</th></tr></thead><tbody>${inv.lines.map(x=>`<tr><td>${e(x.name)}<div style="font-size:10px;color:#8a99a6">${e(x.sku||'')}</div></td><td>${x.qty} ${e(x.unit)}</td><td>${money(x.unitPrice)}</td><td>${pct(x.gst)}</td><td style="text-align:right">${money(x.total)}</td></tr>`).join('')}</tbody></table></div><div class="invoice-bottom"><div class="invoice-bottom-left">${inv.notes?`<p class="invoice-notes"><strong>Note:</strong> ${e(inv.notes)}</p>`:''}${termsMarkup}</div><div class="invoice-total"><div class="summary-row"><span>Items subtotal ${inv.inclusive?'(incl. GST)':''}</span><b>${money(inv.list)}</b></div>${inv.discount?`<div class="summary-row"><span>Discount (${inv.discountPercent}%)</span><b>− ${money(inv.discount)}</b></div>`:''}<div class="summary-row"><span>Taxable amount</span><b>${money(inv.taxable)}</b></div>${taxLines}<div class="summary-row total"><span>Total</span><b>${money(inv.total)}</b></div></div></div><div class="invoice-footer">${String(b.invoiceThankYou??'Thank you for your business!').trim()?`<div class="invoice-footer-primary">${e(String(b.invoiceThankYou??'Thank you for your business!').trim())}</div>`:''}${String(b.invoiceFooterNote??'Invoice generated with BillNest').trim()?`<div class="invoice-footer-secondary">${e(String(b.invoiceFooterNote??'Invoice generated with BillNest').trim())}</div>`:''}</div></article>`;
+ return `<article class="invoice-paper printable-invoice">${resolveBusinessLogo(b)?`<div class="invoice-logo-top">${logoMarkup(resolveBusinessLogo(b))}</div>`:''}<div class="invoice-head"><div class="invoice-business-block"><div class="invoice-business-details"><div class="invoice-business">${e(b.businessName||'My Store')}</div>${b.owner?`<p>${e(b.owner)}</p>`:''}${b.address?`<p>${e(b.address)}</p>`:''}${b.state?`<p>${e(b.state)}</p>`:''}<p>${[b.phone,b.email].filter(Boolean).map(e).join(' · ')}</p>${b.gstin?`<p><b>GSTIN:</b> ${e(b.gstin)}</p>`:''}</div></div><div><div class="invoice-title">INVOICE</div><p style="text-align:right"><b>${e(inv.number)}</b></p>${inv.demo?'<span class="chip yellow">SAMPLE · NOT FOR USE</span>':''}</div></div><div class="invoice-meta"><div><b>BILL TO</b><p><strong>${e(c.name||'Walk-in customer')}</strong></p>${c.address?`<p>${e(c.address)}</p>`:''}${c.state?`<p>${e(c.state)}</p>`:''}${c.phone?`<p>${e(c.phone)}</p>`:''}${c.gstin?`<p>GSTIN: ${e(c.gstin)}</p>`:''}</div><div style="text-align:right"><b>INVOICE DETAILS</b><p>Date: ${formatDate(inv.date)}</p><p>Payment: ${e(inv.payment)}</p><p>Status: ${invoiceOutstanding(inv,db.accounting.entries)===0?'Paid':invoiceOutstanding(inv,db.accounting.entries)===inv.total?'Unpaid':`Part paid (due ${money(invoiceOutstanding(inv,db.accounting.entries))})`}</p></div></div><div class="table-scroll"><table class="invoice-print-table"><thead><tr><th>Item</th><th>Qty</th><th>Rate</th><th>GST</th><th style="text-align:right">Amount</th></tr></thead><tbody>${inv.lines.map(x=>`<tr><td>${e(x.name)}<div style="font-size:10px;color:#8a99a6">${e(x.sku||'')}</div></td><td>${x.qty} ${e(x.unit)}</td><td>${money(x.unitPrice)}</td><td>${pct(x.gst)}</td><td style="text-align:right">${money(x.total)}</td></tr>`).join('')}</tbody></table></div><div class="invoice-bottom"><div class="invoice-bottom-left">${inv.notes?`<p class="invoice-notes"><strong>Note:</strong> ${e(inv.notes)}</p>`:''}${termsMarkup}</div><div class="invoice-total"><div class="summary-row"><span>Items subtotal ${inv.inclusive?'(incl. GST)':''}</span><b>${money(inv.list)}</b></div>${inv.discount?`<div class="summary-row"><span>Discount (${inv.discountPercent}%)</span><b>− ${money(inv.discount)}</b></div>`:''}<div class="summary-row"><span>Taxable amount</span><b>${money(inv.taxable)}</b></div>${taxLines}<div class="summary-row total"><span>Total</span><b>${money(inv.total)}</b></div></div></div><div class="invoice-footer">${String(b.invoiceThankYou??'Thank you for your business!').trim()?`<div class="invoice-footer-primary">${e(String(b.invoiceThankYou??'Thank you for your business!').trim())}</div>`:''}${String(b.invoiceFooterNote??'Invoice generated with BillNest').trim()?`<div class="invoice-footer-secondary">${e(String(b.invoiceFooterNote??'Invoice generated with BillNest').trim())}</div>`:''}</div></article>`;
 }
 function downloadFile(name,content,mime){const blob=new Blob([content],{type:mime}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),10000)}
 function exportProducts(){const rows=[['SKU','Product','Category','Unit','Selling price INR','Purchase cost INR','Stock','Low stock level','GST percent','Barcode']];db.products.forEach(p=>rows.push([p.sku,p.name,p.category,p.unit,p.price,p.cost,p.stock,p.lowStock,p.gst,p.barcode||'']));downloadFile(`billnest-products-${today()}.csv`,'\ufeff'+csvEncode(rows),'text/csv;charset=utf-8')}
+function exportAccounting(){
+ const summary=accountingStats();
+ const rows=[['Date','Type','Description','Account','Cash change INR','Bank change INR','Category','Linked invoice']];
+ summary.cashbook.forEach(row=>rows.push([row.date,ACCOUNT_TYPES[row.type]||'Invoice payment',row.label,row.account==='cash'?'Cash':'Bank / UPI',rupees(row.cash).toFixed(2),rupees(row.bank).toFixed(2),row.category||'',row.invoiceId||'']));
+ downloadFile(`billnest-cashbook-${today()}.csv`,'\ufeff'+csvEncode(rows),'text/csv;charset=utf-8');toast('Cashbook exported.');
+}
 function exportInvoices(){const rows=[['Invoice','Date','Customer','Payment','Payment status','Taxable INR','GST INR','Total INR','Number of items']];db.invoices.forEach(i=>rows.push([i.number,i.date,i.customer?.name||'Walk-in customer',i.payment,i.paid?'Paid':'Unpaid',rupees(i.taxable).toFixed(2),rupees(i.tax).toFixed(2),rupees(i.total).toFixed(2),i.lines.reduce((s,l)=>s+l.qty,0)]));downloadFile(`billnest-invoices-${today()}.csv`,'\ufeff'+csvEncode(rows),'text/csv;charset=utf-8')}
 function saveInvoice(){
  if(!ui.cart.length)return toast('Add at least one product.','error');
@@ -670,10 +820,23 @@ function handleAction(action,id){switch(action){
  case 'remove-cart':ui.cart=ui.cart.filter(x=>x.productId!==id);render();break;
  case 'increase-qty':{const x=ui.cart.find(x=>x.productId===id),p=db.products.find(x=>x.id===id);if(x&&p&&x.qty<p.stock)x.qty++;else toast('Not enough stock.','error');render();break}
  case 'decrease-qty':{const x=ui.cart.find(x=>x.productId===id);if(x){x.qty--;if(x.qty<=0)ui.cart=ui.cart.filter(y=>y.productId!==id)}render();break}
+ case 'add-accounting':openModal('accounting','expense');break;
+ case 'opening-balances':openModal('opening');break;
+ case 'record-receipt':openModal('receipt',id);break;
+ case 'delete-accounting':{
+   const entry=db.accounting.entries.find(x=>x.id===id);if(!entry)return;
+   if(!confirm(`Delete this ${ACCOUNT_TYPES[entry.type]||'transaction'} record? This will change cash/bank balances.${entry.type==='customer-receipt'?' Its invoice may become unpaid again.':''}`))return;
+   const previous=JSON.stringify(db);
+   db.accounting.entries=db.accounting.entries.filter(x=>x.id!==id);
+   if(entry.type==='customer-receipt'){const inv=db.invoices.find(x=>x.id===entry.invoiceId);if(inv)inv.paid=false}
+   if(!save()){db=JSON.parse(previous);return}
+   render();toast('Transaction deleted.');break;
+ }
+ case 'export-accounting':exportAccounting();break;
  case 'save-invoice':saveInvoice();break;
  case 'view-invoice':ui.invoiceId=id;openModal('invoice');break;
  case 'print-invoice':{const inv=db.invoices.find(i=>i.id===id);if(!inv)return;$('#printLayer').innerHTML=invoicePaper(inv);window.print();break}
- case 'mark-paid':{const inv=db.invoices.find(i=>i.id===id);if(inv&&!inv.paid&&confirm(`Mark ${inv.number} as paid?`)){inv.paid=true;save();render();toast('Payment marked as received.')}break}
+ case 'mark-paid':openModal('receipt',id);break
  case 'export-products':exportProducts();break;
  case 'export-invoices':exportInvoices();break;
  case 'remove-business-logo':pendingLogo='';paintLogoPreview();break;
@@ -683,6 +846,41 @@ function handleAction(action,id){switch(action){
  }}
 function validateNonnegative(n,name,integer=false){if(!Number.isFinite(n)||n<0||integer&&!Number.isInteger(n))throw Error('Enter a valid '+name+'.')}
 function handleForm(form){const data=Object.fromEntries(new FormData(form));try{
+ if(form.id==='accountingForm'){
+   const type=String(data.type||''),date=String(data.date||''),amount=toPaise(data.amount);
+   if(!Object.keys(ACCOUNT_TYPES).includes(type)||type==='customer-receipt')throw Error('Select a valid transaction type.');
+   if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||!Number.isFinite(new Date(date+'T12:00:00').getTime()))throw Error('Enter a valid transaction date.');
+   if(!Number.isSafeInteger(amount)||amount<=0||amount>999999900)throw Error('Amount must be between ₹0.01 and ₹99,99,999.');
+   if(!['cash','bank'].includes(data.account))throw Error('Select Cash or Bank.');
+   if(type==='transfer'&&!['cash','bank'].includes(data.toAccount)||type==='transfer'&&data.toAccount===data.account)throw Error('Transfer destination must be the other account.');
+   const description=String(data.description||'').trim().slice(0,140),category=String(data.category||'').trim().slice(0,60);
+   if(!description)throw Error('Enter a description.');
+   const entry={id:uid(),createdAt:new Date().toISOString(),date,type,account:data.account,
+     toAccount:type==='transfer'?data.toAccount:'',amount,category,description};
+   db.accounting.entries.push(entry);
+   if(!save()){db.accounting.entries.pop();return}
+   closeModal();render();toast('Accounting transaction saved.');
+ }
+ if(form.id==='openingForm'){
+   const cash=toPaise(data.cash),bank=toPaise(data.bank);
+   if(!Number.isSafeInteger(cash)||cash<0||!Number.isSafeInteger(bank)||bank<0||cash>1_000_000_000_00||bank>1_000_000_000_00)throw Error('Enter valid non-negative opening balances.');
+   const before={...db.accounting.opening};db.accounting.opening={cash,bank};
+   if(!save()){db.accounting.opening=before;return}
+   closeModal();render();toast('Opening balances saved.');
+ }
+ if(form.id==='receiptForm'){
+   const inv=db.invoices.find(x=>x.id===ui.editId);if(!inv)throw Error('Invoice not found.');
+   const due=invoiceOutstanding(inv,db.accounting.entries),amount=toPaise(data.amount);
+   if(!Number.isSafeInteger(amount)||amount<=0||amount>due)throw Error('Receipt must be greater than zero and not exceed the outstanding balance.');
+   const date=String(data.date||'');
+   if(!/^\d{4}-\d{2}-\d{2}$/.test(date)||!Number.isFinite(new Date(date+'T12:00:00').getTime())||date<inv.date)throw Error('Payment date must be on or after the invoice date.');
+   if(!['cash','bank'].includes(data.account))throw Error('Select Cash or Bank.');
+   const prevPaid=inv.paid;
+   db.accounting.entries.push({id:uid(),date,createdAt:new Date().toISOString(),type:'customer-receipt',invoiceId:inv.id,account:data.account,amount,category:'Customer receipt',description:String(data.description||'').trim().slice(0,140)||`Receipt for ${inv.number}`});
+   inv.paid=amount===due;
+   if(!save()){db.accounting.entries.pop();inv.paid=prevPaid;return}
+   closeModal();render();toast(inv.paid?'Invoice paid in full.':'Partial payment recorded.');
+ }
  if(form.id==='productForm'){
   const name=data.name.trim(),sku=data.sku.trim().toUpperCase(),barcode=cleanBarcode(data.barcode),price=Number(data.price),cost=data.cost===''?0:Number(data.cost),stock=Number(data.stock),lowStock=Number(data.lowStock);
   if(!name||!sku)throw Error('Product name and SKU are required.');
@@ -728,9 +926,13 @@ async function importBackup(file){if(!file)return;try{
  const raw=await file.text();if(raw.length>10_000_000)throw Error('Backup file is too large.');const payload=JSON.parse(raw);
  if(payload.version!==1||!Array.isArray(payload.products)||!Array.isArray(payload.customers)||!Array.isArray(payload.invoices)||!Array.isArray(payload.movements)||!payload.settings||!Number.isInteger(payload.settings.nextInvoice)||payload.settings.nextInvoice<1)throw Error('This is not a valid BillNest v1 backup.');
  if(payload.products.length>100000||payload.invoices.length>100000)throw Error('Backup has too many records.');
+ if(payload.accounting){
+   const ac=payload.accounting;
+   if(!ac||typeof ac!=='object'||!Array.isArray(ac.entries)||ac.entries.length>100000||ac.entries.some(row=>!row||typeof row.id!=='string'||!Number.isSafeInteger(row.amount)||row.amount<=0||!Object.keys(ACCOUNT_TYPES).includes(row.type)||!['cash','bank'].includes(row.account)||!/^\d{4}-\d{2}-\d{2}$/.test(String(row.date||''))))throw Error('Backup contains invalid accounting transactions.');
+ }
  if(!payload.products.every(p=>p&&typeof p.id==='string'&&typeof p.name==='string'&&Number.isInteger(p.stock)&&p.stock>=0&&Number.isFinite(p.price)&&p.price>=0)||!payload.invoices.every(i=>i&&Array.isArray(i.lines)&&Number.isFinite(i.total)))throw Error('Backup contains invalid records.');
  if(!confirm(`Replace this workspace with ${payload.products.length} products and ${payload.invoices.length} invoices from the backup? Your current data will be overwritten.`))return;
- const old=db;db=payload;if(!save()){db=old;return}ui={...ui,page:'dashboard',cart:[],modal:null};render();toast('Backup restored successfully.');
+ const old=db;db={...emptyDb(),...payload,settings:{...emptyDb().settings,...payload.settings},accounting:normaliseAccounting(payload.accounting)};if(!save()){db=old;return}ui={...ui,page:'dashboard',cart:[],modal:null};render();toast('Backup restored successfully.');
  }catch(err){toast('Import failed: '+err.message,'error')}finally{const f=$('#importFile');if(f)f.value=''}}
 
 document.addEventListener('click',event=>{
@@ -738,10 +940,10 @@ document.addEventListener('click',event=>{
  const go=event.target.closest('[data-go]');if(go){navigate(go.dataset.go);return}
  const action=event.target.closest('[data-action]');if(action&&action.dataset.action!=='overlay-close'){event.preventDefault();handleAction(action.dataset.action,action.dataset.id);return}
 });
-document.addEventListener('submit',event=>{if(event.target.matches('#scanManualForm')){event.preventDefault();barcodeFound(new FormData(event.target).get('barcode'),true);return}if(event.target.matches('#productForm,#customerForm,#stockForm,#settingsForm')){event.preventDefault();handleForm(event.target)}});
+document.addEventListener('submit',event=>{if(event.target.matches('#scanManualForm')){event.preventDefault();barcodeFound(new FormData(event.target).get('barcode'),true);return}if(event.target.matches('#productForm,#customerForm,#stockForm,#settingsForm,#accountingForm,#openingForm,#receiptForm')){event.preventDefault();handleForm(event.target)}});
 document.addEventListener('input',event=>{
  const input=event.target;
- if(input.dataset.search){const key=input.dataset.search;const map={inventory:'search',billing:'billingSearch',sales:'salesSearch',customers:'customerSearch',profit:'profitSearch'};ui[map[key]]=input.value;rerenderKeepFocus(`[data-search="${key}"]`);}
+ if(input.dataset.search){const key=input.dataset.search;const map={inventory:'search',billing:'billingSearch',sales:'salesSearch',customers:'customerSearch',profit:'profitSearch',accounting:'accountingSearch'};ui[map[key]]=input.value;rerenderKeepFocus(`[data-search="${key}"]`);}
  if(input.id==='billDiscount'){const n=Number(input.value);ui.discount=Math.max(0,Math.min(100,Number.isFinite(n)?n:0));rerenderKeepFocus('#billDiscount')}
  if(input.id==='billNotes')ui.billNotes=input.value;
  if(input.id==='scannerZoom')applyScannerZoom(input.value);
@@ -753,6 +955,7 @@ document.addEventListener('change',event=>{
  if(t.id==='billPayment'){ui.payment=t.value;render()}
  if(t.id==='reportRange'){ui.reportRange=t.value;render()}
  if(t.id==='profitRange' && ['7','30','90','all'].includes(t.value)){ui.profitRange=t.value;render()}
+ if(t.id==='accountingRange' && ['7','30','90','all'].includes(t.value)){ui.accountingRange=t.value;render()}
  if(t.id==='importFile')importBackup(t.files?.[0]);
  if(t.id==='businessLogoFile')convertBusinessLogo(t.files?.[0]);
  if(t.id==='barcodePhoto')scanBarcodeImage(t.files?.[0]);
