@@ -1,9 +1,9 @@
 /* BillNest installable offline app shell. No cloud or customer responses are cached. */
-const CACHE = 'billnest-shell-v25';
+const CACHE = 'billnest-shell-v26';
 const SHELL = [
- './','./index.html','./styles.css?v=25','./app.bundle.js?v=23',
+ './','./index.html','./styles.css?v=26','./app.bundle.js?v=23',
  './cloud-backup.js?v=23','./qrcode.min.js?v=1','./manifest.webmanifest',
- './logo-mark.svg?v=24','./favicon.svg?v=24','./install-app.js?v=25',
+ './logo-mark.svg?v=24','./favicon.svg?v=24','./install-app.js?v=26',
  './icons/icon-192.png','./icons/icon-512.png','./icons/icon-maskable-512.png'
 ];
 self.addEventListener('install',event=>{
