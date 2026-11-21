@@ -309,7 +309,32 @@ function decodeRetailImageData(frame){
   }
   return '';
 }
+/** Estimate the 75th percentile luminance of camera pixels (0..255).
+ * Bright barcode labels contain dark stripes; using the upper percentile
+ * avoids misclassifying their dark bars as poor ambient lighting.
+ * Returns null for absent/invalid frames. The camera stream remains local.
+ */
+function barcodeSceneBrightness(frame){
+ const {data,width,height}=frame||{};
+ if(!data||!Number.isInteger(width)||!Number.isInteger(height)||width<1||height<1||data.length<width*height*4)return null;
+ const buckets=new Uint32Array(16);
+ const dx=Math.max(1,Math.floor(width/48)),dy=Math.max(1,Math.floor(height/14));
+ let samples=0;
+ for(let y=0;y<height;y+=dy){
+  for(let x=0;x<width;x+=dx){
+   const i=(y*width+x)*4;
+   const lum=Math.round(.2126*data[i]+.7152*data[i+1]+.0722*data[i+2]);
+   buckets[Math.min(15,lum>>4)]++;samples++;
+  }
+ }
+ const target=Math.ceil(samples*.75);
+ let count=0;
+ for(let i=0;i<16;i++){count+=buckets[i];if(count>=target)return i*16+8}
+ return 0;
+}
+
 const e = escapeHtml;
+
 
 
 
@@ -418,17 +443,18 @@ const SCANNABLE_FORMATS = ['ean_13','ean_8','upc_a','upc_e','code_128','code_39'
 const scanner = {
  open:false,mode:'billing',session:0,stream:null,controls:null,timer:null,engineTimer:null,
  busy:false,last:'',lastSeenAt:0,engine:'',facing:'environment',torch:false,switching:false,
- deviceId:'',cameras:[],zoom:1,zoomRange:null,misses:0,cropCanvas:null,localCanvas:null,localTimer:null,localScans:0
+ deviceId:'',cameras:[],zoom:1,zoomRange:null,misses:0,cropCanvas:null,localCanvas:null,localTimer:null,localScans:0,
+ focusTimer:null,focusMode:'device',lastFocusAt:0,lastReadAt:0,lightMode:'auto',torchAvailable:false,torchBusy:false,torchFailed:false,lightDimSamples:0,lightCheckedAt:0
 };
 const scannerStatus = (message,type='info') => {const el=$('#scannerStatus');if(el){el.textContent=message;el.dataset.state=type}};
 function releaseScannerCamera(){
  scanner.session++;
- clearTimeout(scanner.timer);clearTimeout(scanner.engineTimer);clearTimeout(scanner.localTimer);
- scanner.timer=null;scanner.engineTimer=null;scanner.localTimer=null;scanner.busy=false;scanner.switching=false;
+ clearTimeout(scanner.timer);clearTimeout(scanner.engineTimer);clearTimeout(scanner.localTimer);clearTimeout(scanner.focusTimer);
+ scanner.timer=null;scanner.engineTimer=null;scanner.localTimer=null;scanner.focusTimer=null;scanner.busy=false;scanner.switching=false;
  try{scanner.controls?.stop?.()}catch(err){console.warn('Scanner stop:',err)}scanner.controls=null;
  scanner.stream?.getTracks?.().forEach(track=>track.stop());scanner.stream=null;
  const vid=$('#scannerVideo');if(vid){try{vid.pause?.()}catch{}vid.srcObject=null}
- scanner.engine='';scanner.torch=false;scanner.zoomRange=null;scanner.misses=0;scanner.cropCanvas=null;scanner.localCanvas=null;scanner.localScans=0;
+ scanner.engine='';scanner.torch=false;scanner.torchAvailable=false;scanner.torchBusy=false;scanner.torchFailed=false;scanner.lightDimSamples=0;scanner.lightCheckedAt=0;scanner.zoomRange=null;scanner.misses=0;scanner.cropCanvas=null;scanner.localCanvas=null;scanner.localScans=0;scanner.focusMode='device';scanner.lastFocusAt=0;scanner.lastReadAt=0;
 }
 function stopScanner(){
  scanner.open=false;releaseScannerCamera();
@@ -444,16 +470,16 @@ function scannerMarkup(mode){
  <div class="scanner-preview"><video id="scannerVideo" muted playsinline autoplay aria-label="Live barcode camera preview"></video><div class="scanner-guide" aria-hidden="true"><span></span></div><span class="scanner-camera-label">Hold still • Keep the complete barcode in view</span></div>
  <p id="scannerStatus" class="scanner-status" role="status" aria-live="polite">Opening rear camera…</p>
  <div class="scanner-optics"><div id="scannerCameraWrap" class="scanner-camera-pick" hidden><label for="scannerCamera">Camera lens (choose Macro for close labels)</label><select id="scannerCamera" aria-label="Choose camera lens"></select></div><div id="scannerZoomWrap" class="scanner-zoom" hidden><div><label for="scannerZoom">Zoom</label><output id="scannerZoomValue" for="scannerZoom">1.0×</output></div><input id="scannerZoom" type="range" min="1" max="2" step="0.1" value="1" aria-label="Camera optical or digital zoom"></div></div>
- <div class="scanner-actions"><button type="button" class="btn" data-action="scanner-focus">◎ Refocus</button><button type="button" class="btn" data-action="scanner-switch">↻ Switch</button><button type="button" class="btn" data-action="scanner-torch" id="scannerTorch" hidden>⚡ Light</button><button type="button" class="btn" data-action="scanner-retry">Retry</button></div>
+ <div class="scanner-actions"><button type="button" class="btn" data-action="scanner-focus">◎ Refocus</button><button type="button" class="btn" data-action="scanner-switch">↻ Switch</button><button type="button" class="btn" data-action="scanner-torch" id="scannerTorch" title="Tap to cycle Auto, On, Off" hidden>⚡ Light: Auto</button><button type="button" class="btn" data-action="scanner-retry">Retry</button></div>
  <label class="scanner-photo-button" for="barcodePhoto">📷 Scan from photo / camera</label><input class="scanner-photo-input" id="barcodePhoto" type="file" accept="image/*" aria-label="Scan barcode from a photo or camera">
- <p class="scanner-photo-hint">If live scanning stays blurry at 10–20 cm, select the Macro lens if available, or use your working photo scanner. Some phone cameras cannot focus this close in a browser.</p>
+ <p class="scanner-photo-hint">Scanning continues until a code is found or you close the camera. Autofocus and automatic light work on supported phones. Tap Light to cycle Auto, On and Off. If close-up bars remain blurry, try Macro, a greater distance or Scan from photo.</p>
  <form id="scanManualForm" class="scanner-manual-form"><label for="manualBarcode">Enter the barcode manually</label><div class="scanner-manual-row"><input id="manualBarcode" name="barcode" placeholder="EAN, UPC, barcode or SKU" autocomplete="off" autocapitalize="off" inputmode="text" maxlength="80" required><button class="btn btn-primary" type="submit">Use code</button></div></form>
  <p class="scanner-hint">HTTPS and camera permission are required. Your camera video is not uploaded. Barcode prices and product details come from your own inventory.</p>
  </div></div>`;
 }
 function openScanner(mode='billing'){
  if(scanner.open)stopScanner();
- scanner.open=true;scanner.mode=mode;scanner.last='';scanner.lastSeenAt=0;scanner.facing='environment';scanner.deviceId='';scanner.zoom=1;
+ scanner.open=true;scanner.mode=mode;scanner.last='';scanner.lastSeenAt=0;scanner.facing='environment';scanner.deviceId='';scanner.zoom=1;scanner.lightMode='auto';
  $('#scannerLayer').innerHTML=scannerMarkup(mode);
  document.body.classList.add('scanner-open');
  startScannerCamera();
@@ -467,7 +493,7 @@ function barcodeFound(raw,explicit=false){
  // another unit of the same product, move the label out of view for ~1.5s.
  const sameLabel=barcodeAliases(code).some(value=>barcodeAliases(scanner.last).includes(value));
  if(!explicit&&sameLabel&&when-scanner.lastSeenAt<1500){scanner.lastSeenAt=when;return}
- scanner.last=code;scanner.lastSeenAt=when;
+ scanner.last=code;scanner.lastSeenAt=when;scanner.lastReadAt=when;
  if(scanner.mode==='product'){
   stopScanner();const input=$('#barcode');if(input){input.value=code;input.focus()}
   const sku=$('#sku');if(sku&&!sku.value.trim())sku.value=code.slice(0,40);
@@ -511,19 +537,87 @@ function loadBarcodeLibrary(){
  return fallbackLoader;
 }
 function scannerCameraTrack(){return scanner.stream?.getVideoTracks?.()[0]||$('#scannerVideo')?.srcObject?.getVideoTracks?.()[0]||null}
+function updateScannerLightButton(){
+ const button=$('#scannerTorch');if(!button)return;
+ const value=scanner.lightMode==='auto'?'Auto':scanner.lightMode==='on'?'On':'Off';
+ button.textContent=`⚡ Light: ${value}`;
+ button.title='Tap to cycle automatic, always on, and off';
+ button.setAttribute?.('aria-label',`Flashlight ${value}. Tap to change mode`);
+}
+async function setScannerTorch(enabled,session=scanner.session){
+ const track=scannerCameraTrack();
+ if(!scanner.open||session!==scanner.session||!scanner.torchAvailable||scanner.torchFailed||scanner.torchBusy||!track?.applyConstraints)return false;
+ if(scanner.torch===enabled)return true;
+ scanner.torchBusy=true;
+ try{
+  await track.applyConstraints({advanced:[{torch:enabled}]});
+  if(session===scanner.session&&scanner.open){
+   scanner.torch=enabled;
+   if(enabled&&scanner.lightMode==='auto')scannerStatus('Low light detected. Flashlight on; scanning continues.');
+  }
+  return true;
+ }catch(err){
+  if(session===scanner.session&&scanner.open){
+   scanner.torchFailed=true;
+   scannerStatus('Camera torch is unavailable on this browser. Keep the barcode well lit or use photo scanning.','error');
+  }
+  return false;
+ }finally{if(session===scanner.session)scanner.torchBusy=false}
+}
+function autoAdjustScannerLight(frame,session){
+ if(!scanner.open||scanner.session!==session||scanner.lightMode!=='auto'||!scanner.torchAvailable||scanner.torch||scanner.torchFailed)return;
+ const now=Date.now();if(now-scanner.lightCheckedAt<650)return;
+ scanner.lightCheckedAt=now;
+ // Use high-percentile luminance so the black barcode stripes do not
+ // mistakenly trigger the light against a bright white label.
+ const light=barcodeSceneBrightness(frame);
+ if(light===null)return;
+ scanner.lightDimSamples=light<105?scanner.lightDimSamples+1:0;
+ if(scanner.lightDimSamples>=3){scanner.lightDimSamples=0;setScannerTorch(true,session)}
+}
+async function requestScannerFocus(session=scanner.session){
+ if(!scanner.open||scanner.session!==session||!scanner.stream)return;
+ const track=scannerCameraTrack();if(!track?.applyConstraints)return;
+ try{
+  const caps=track.getCapabilities?.()||{};
+  const modes=Array.isArray(caps.focusMode)?caps.focusMode:[];
+  const mode=modes.includes('continuous')?'continuous':modes.includes('single-shot')?'single-shot':null;
+  if(!mode)return;
+  await track.applyConstraints({advanced:[{focusMode:mode}]});
+  if(scanner.session===session){scanner.focusMode=mode;scanner.lastFocusAt=Date.now()}
+ }catch(err){console.info('Autofocus is controlled by camera hardware:',err)}
+}
+function startScannerFocusLoop(session){
+ clearTimeout(scanner.focusTimer);
+ // Continuous autofocus is hardware-managed. For single-shot devices, retry
+ // when the barcode has not been detected. Never restart the camera stream.
+ const tick=()=>{
+  if(!scanner.open||scanner.session!==session)return;
+  if(scanner.focusMode==='single-shot'&&Date.now()-scanner.lastReadAt>3500)requestScannerFocus(session);
+  scanner.focusTimer=setTimeout(tick,4000);
+ };
+ scanner.focusTimer=setTimeout(tick,4000);
+}
 function scannerCameraConstraints(){
  return {audio:false,video:{...(scanner.deviceId?{deviceId:{exact:scanner.deviceId}}:{facingMode:{ideal:scanner.facing}}),width:{ideal:1920},height:{ideal:1080},frameRate:{ideal:30,max:30}}};
 }
 async function configureScannerTrack(){
  const track=scannerCameraTrack();if(!track)return;
  let caps={};try{caps=track.getCapabilities?.()||{}}catch{}
- const torchButton=$('#scannerTorch');if(torchButton)torchButton.hidden=!caps.torch;
+ scanner.torchAvailable=Boolean(caps.torch) && typeof track.applyConstraints==='function';
+ const torchButton=$('#scannerTorch');if(torchButton){torchButton.hidden=!scanner.torchAvailable;updateScannerLightButton()}
  // Only request supported focusing features. Never let an unsupported constraint
  // prevent the basic camera stream from working.
  const focusModes=Array.isArray(caps.focusMode)?caps.focusMode:[];
+ scanner.focusMode='device';
  if(focusModes.includes('continuous')){
-  try{await track.applyConstraints?.({advanced:[{focusMode:'continuous'}]})}catch(err){console.info('Continuous autofocus unavailable:',err)}
+  try{await track.applyConstraints?.({advanced:[{focusMode:'continuous'}]});scanner.focusMode='continuous';scanner.lastFocusAt=Date.now()}catch(err){console.info('Continuous autofocus unavailable:',err)}
  }
+ if(scanner.focusMode==='device'&&focusModes.includes('single-shot')){
+  try{await track.applyConstraints?.({advanced:[{focusMode:'single-shot'}]});scanner.focusMode='single-shot';scanner.lastFocusAt=Date.now()}catch(err){console.info('Single-shot focus unavailable:',err)}
+ }
+ startScannerFocusLoop(scanner.session);
+ if(scanner.lightMode==='on'&&scanner.torchAvailable)await setScannerTorch(true,scanner.session);
  const zoomWrap=$('#scannerZoomWrap'),slider=$('#scannerZoom'),output=$('#scannerZoomValue');
  const zoom=caps.zoom;
  if(zoomWrap&&slider&&zoom&&Number.isFinite(zoom.min)&&Number.isFinite(zoom.max)&&zoom.max>zoom.min){
@@ -606,7 +700,7 @@ async function useFallbackScanner(nativeSession){
  let zxing;
  try{zxing=await loadBarcodeLibrary()}
  catch(err){
-  if(scanner.open&&scanner.session===nativeSession){scanner.switching=false;scannerStatus('Retail barcode scanning continues. Wider-format decoder unavailable; photo scanning is still available.')}
+  if(scanner.open&&scanner.session===nativeSession){scanner.switching=false;scannerStatus('Retail scanner is still searching. Wider-format decoder unavailable; photo scanning is still available.')}
   return;
  }
  if(!scanner.open||scanner.session!==nativeSession)return;
@@ -662,7 +756,9 @@ function startLocalRetailReader(session){
     if(ctx){
      const sh=Math.max(80,Math.round(video.videoHeight*.44)),sy=Math.max(0,Math.round((video.videoHeight-sh)/2));
      ctx.drawImage(video,0,sy,video.videoWidth,Math.min(sh,video.videoHeight),0,0,w,h);
-     const code=decodeRetailImageData(ctx.getImageData(0,0,w,h));
+     const frame=ctx.getImageData(0,0,w,h);
+     autoAdjustScannerLight(frame,session);
+     const code=decodeRetailImageData(frame);
      if(code)barcodeFound(code);
      scanner.localScans++;
     }
@@ -699,7 +795,7 @@ async function startScannerCamera(){
   await configureScannerTrack();
   listScannerCameras(session);
   startLocalRetailReader(session);
-  scannerStatus('Camera ready. EAN / UPC scanning works offline. Keep bars sharp and fully visible.');
+  scannerStatus('Scanning continuously. Hold the barcode steady and fully visible; automatic focus/light run where available.');
   const detector=await getNativeDetector();
   if(!scanner.open||session!==scanner.session)return;
   if(!detector){
@@ -710,7 +806,7 @@ async function startScannerCamera(){
     if(!scanner.open||session!==scanner.session)return;
     await startZXingScanner(zxing,session);
    }catch(err){
-    if(scanner.open&&session===scanner.session)scannerStatus('Retail EAN / UPC scanner active. Wider barcode reader unavailable offline; photo/manual entry remains available.');
+    if(scanner.open&&session===scanner.session)scannerStatus('Retail scanner is still searching. Other barcode formats need a network connection; photo/manual entry is available.');
    }
    return;
   }
@@ -787,8 +883,13 @@ async function scanBarcodeImage(file){
  }finally{URL.revokeObjectURL(objectUrl);const f=$('#barcodePhoto');if(f)f.value=''}
 }
 async function toggleScannerTorch(){
- const track=scannerCameraTrack();if(!track?.applyConstraints)return scannerStatus('Flashlight is not supported on this camera.','error');
- try{const enabled=!scanner.torch;await track.applyConstraints({advanced:[{torch:enabled}]});scanner.torch=enabled;const button=$('#scannerTorch');if(button)button.textContent=enabled?'⚡ Turn off flashlight':'⚡ Flashlight'}catch{scannerStatus('Flashlight is unavailable.','error')}
+ if(!scanner.torchAvailable)return scannerStatus('This camera does not support a controllable flashlight.','error');
+ const next=scanner.lightMode==='auto'?'on':scanner.lightMode==='on'?'off':'auto';
+ scanner.lightMode=next;scanner.lightDimSamples=0;scanner.lightCheckedAt=0;
+ updateScannerLightButton();
+ if(next==='off')await setScannerTorch(false);
+ else if(next==='on')await setScannerTorch(true);
+ else {await setScannerTorch(false);scannerStatus('Automatic light detection enabled. Scanning continues.');}
 }
 
 function save(){try{localStorage.setItem(STORE_KEY,JSON.stringify(db));return true}catch(err){console.error(err);toast('Could not save. Browser storage is unavailable or full. Export a backup.','error');return false}}
