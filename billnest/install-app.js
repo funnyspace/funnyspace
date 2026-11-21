@@ -2,7 +2,7 @@
 (()=>{
  let deferred=null;
  const $=id=>document.getElementById(id);
- const standalone=()=>matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
+ const standalone=()=>Boolean(globalThis.BillNestAndroid)||matchMedia('(display-mode: standalone)').matches||navigator.standalone===true;
  const mobile=()=>/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)||matchMedia('(max-width:700px)').matches;
  const show=()=>{
   const card=$('installAppCard');
