@@ -207,7 +207,8 @@
     if(changed){session=null;persist(SESSION_KEY,null);authGeneration++;list=[];lastSync=''}
     config={url,key,deviceName};
     if(!persist(CONFIG_KEY,config))throw Error('Browser storage is unavailable.');
-    setMessage('Connection saved. Sign in by email to enable automatic backup.','local');
+    setMessage('Authentication connection saved. Open Login / Sign up in the top bar to create an account or sign in.','local');
+    if(changed)window.dispatchEvent(new Event('billnest-auth-changed'));
     if(ready())schedule(250);
   }
   async function sendOtp(channel, identifier, mode='signup') {
