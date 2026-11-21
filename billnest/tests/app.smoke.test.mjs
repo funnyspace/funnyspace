@@ -174,13 +174,11 @@ test('business logo upload, custom invoice footer, escaped messages and invoice 
  }finally{globalThis.document.createElement=oldCreate;globalThis.Image=oldImage;globalThis.FormData=oldFormData;clickAction('close-modal')}
 });
 
-test('profit and loss lives under Reports, not Dashboard; date and product filters work',()=>{
+test('profit and loss is in Reports, not Dashboard, with working filters',()=>{
  clickGo('dashboard');
  assert.doesNotMatch(node('#main').innerHTML,/id="profitTitle"/);
- assert.match(node('#main').innerHTML,/Sales overview/);
  clickGo('reports');
  let markup=node('#main').innerHTML;
- assert.match(markup,/Business reports/);
  assert.match(markup,/Profit &amp; loss/);
  assert.match(markup,/Product-wise profit \/ loss/);
  assert.match(markup,/Net sales \(excl\. GST\)/);
@@ -266,4 +264,33 @@ test('accounting transactions, opening balances, and receipts persist with prope
   db=JSON.parse(items.get('billnest-workspace-v1'));
   assert.equal(db.invoices.at(-1).paid,false);
  }finally{globalThis.FormData=OldFormData;clickAction('close-modal')}
+});
+
+
+test('dashboard has three raised SVG quick actions and inventory supports 30-day expiry alert',()=>{
+  clickGo('dashboard');
+  let markup=node('#main').innerHTML;
+  assert.match(markup,/class="quick-start-icon icon-3d"/);
+  assert.equal((markup.match(/class="quick-start-icon icon-3d"/g)||[]).length,3);
+  assert.match(markup,/icon-3d-svg/);
+  clickGo('inventory');clickAction('add-product');
+  assert.match(node('#modalLayer').innerHTML,/name="expiryDate" type="date"/);
+  const oldFormData=globalThis.FormData;
+  globalThis.FormData=class {constructor(form){this.entries=Object.entries(form.values)}*[Symbol.iterator](){yield* this.entries}};
+  const due=new Date();due.setDate(due.getDate()+30);
+  const date=`${due.getFullYear()}-${String(due.getMonth()+1).padStart(2,'0')}-${String(due.getDate()).padStart(2,'0')}`;
+  try{
+    listeners.submit({target:{id:'productForm',values:{name:'Expiring sample',sku:'EXPIRY-SAMPLE-1',barcode:'',category:'Food',unit:'pcs',price:'120',cost:'60',stock:'8',lowStock:'2',gst:'5',expiryDate:date},matches:q=>q.includes('#productForm')},preventDefault(){}});
+    const db=JSON.parse(items.get('billnest-workspace-v1'));
+    assert.equal(db.products.at(-1).expiryDate,date);
+    assert.match(node('#main').innerHTML,/Expiring sample/);
+    assert.match(node('#main').innerHTML,/30d to expiry/);
+    assert.match(node('#main').innerHTML,/Expiring ≤30 days/);
+    listeners.change({target:{dataset:{filter:'inventory'},value:'expiring'}});
+    assert.match(node('#main').innerHTML,/Expiring sample/);
+    clickGo('dashboard');
+    assert.match(node('#main').innerHTML,/Stock &amp; expiry alerts/);
+    assert.match(node('#main').innerHTML,/Expiring sample/);
+    assert.match(node('#main').innerHTML,/30 days/);
+  }finally{globalThis.FormData=oldFormData;clickAction('close-modal')}
 });
