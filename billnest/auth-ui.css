@@ -21,3 +21,12 @@
 .billnest-auth-setup{padding:15px;border-radius:10px;background:#f3faf7;border:1px dashed #accfc4}
 body.billnest-auth-open{overflow:hidden}
 @media(max-width:700px){.billnest-account-btn{width:36px;min-width:36px;padding:6px}.billnest-account-text{display:none}.billnest-auth-panel{padding:22px 18px}}
+
+/* Account registration refinements */
+.billnest-auth-mode{margin-bottom:10px}
+.billnest-auth-otp-actions{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:9px}
+.billnest-auth-secondary:disabled{opacity:.45;cursor:not-allowed;text-decoration:none}
+.billnest-auth-setup .billnest-auth-primary{margin-top:14px}
+.billnest-auth-setup .billnest-auth-secondary{display:block;width:100%;margin-top:7px;text-align:center}
+.billnest-auth-form [readonly]{background:#f5f8f9;color:#425d65}
+@media(max-width:390px){.billnest-auth-tabs{gap:3px;padding:4px}.billnest-auth-tabs button{font-size:12px;padding:5px 7px}.billnest-auth-otp-actions{align-items:stretch;flex-direction:column}}

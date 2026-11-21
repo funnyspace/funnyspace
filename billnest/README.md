@@ -218,6 +218,50 @@ Bluetooth LE direct printing must be tested on the actual ESC/POS model.
 A generic website cannot guarantee automatic cut, Hindi support, connection
 stability, or silent printing on every thermal printer.
 
+## Account creation troubleshooting (registration fix)
+
+The **Login / Sign up** button now opens separate **Create account** and **Sign in**
+tabs. New users can verify email or mobile number to register, while the Sign in
+tab avoids silently creating a new account. A 10-digit Indian mobile number is
+normalized to +91 in the API request; international numbers can be entered in
+E.164 format. The verification-code view allows a resend after 60 seconds.
+Incorrect/expired codes, rate limiting, and unconfigured Email/SMS providers
+show actionable errors.
+
+**Required to enable real signup for everyone on GitHub Pages:**
+
+1. Create a Supabase project at https://supabase.com/dashboard, or choose an
+   existing project you control. Enable user signup in Auth settings.
+2. Enable the **Email** provider, and set the Magic Link email template to use
+   `{{ .Token }}` so a numeric OTP is emailed. Configure SMTP if you need
+   production delivery volumes.
+3. Enable **Phone** authentication and configure an SMS delivery provider.
+   SMS delivery is not supported by GitHub Pages on its own. For Indian SMS,
+   check DLT templates and regulations with your provider.
+4. Copy the **Project URL** and **public publishable/anon key** from Supabase.
+   Edit `billnest/auth-config.js`:
+   ```js
+   window.BILLNEST_AUTH_CONFIG = {
+     url: 'https://YOUR-PROJECT.supabase.co',
+     key: 'YOUR-PUBLISHABLE-KEY'
+   };
+   ```
+   Never add your Supabase `secret` or `service_role` key to this public file.
+5. Push the updated public config and reload BillNest. Test a new email and
+   a new phone separately. Set up `supabase-schema.sql` and RLS before
+   enabling private cloud backups. OTP sign-in itself does not require the
+   backup table, but cloud backup does.
+
+If `auth-config.js` remains blank, the modal intentionally shows **Account
+registration is not activated** rather than claiming an OTP was sent. The
+Settings > Cloud backup fields can also be used for a *single-browser test*,
+but that does not enable registration for all visitors.
+
+**Preserving data:** Creating or switching accounts does not erase the guest
+workspace. An existing offline store may be explicitly copied into an empty
+account workspace. Multiple devices still require manual restore from
+Supabase backup; online live sync is not yet implemented.
+
 ## Email and mobile OTP sign-in
 
 BillNest now provides a **Sign in** button in the top bar. Users can sign up or sign in with
