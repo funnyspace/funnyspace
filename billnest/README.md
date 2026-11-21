@@ -183,3 +183,7 @@ BillNest now includes an optional automatic cloud backup panel in **Settings > C
 Cloud backups are private per signed-in user through RLS, with one latest snapshot per device. The Cloud backup panel lists available devices and offers explicit **Restore** with confirmation. Save a JSON backup before restoring another device's data. The implementation is limited to about 8 MB per workspace. The website remains hosted by GitHub Pages, while the actual database is supplied by **your** Supabase project.
 
 See [CLOUD_SETUP.md](CLOUD_SETUP.md) for complete instructions, security considerations, and limitations.
+
+## BillNest brand identity (Version 24)
+
+The website now uses the signature receipt-shaped **B** icon with a white upper half, emerald-green lower half and receipt-edge silhouette. The sidebar lockup retains the lowercase **billnest.** wordmark and **INVENTORY + BILLING** subtitle. The browser favicon uses the same B mark on a navy tile; the mobile header displays a compact mark where horizontal space allows. The vector master is `logo-mark.svg`. The rest of Billing, Inventory, Cloud Backup, and the saved business workspace remain unchanged.
