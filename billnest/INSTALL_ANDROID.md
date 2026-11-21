@@ -17,3 +17,7 @@ If you specifically want a `.apk` file, open the [BillNest Android APK builds](h
 **Do not lose your inventory:** the APK's Android WebView has separate local data from Chrome. Before using it, export your business data as JSON from the Chrome version (**Settings > Data & backup > Download JSON**), then restore that backup in the APK. If you want seamless continuity with the existing website data without migration, use the recommended PWA install instead.
 
 The Android wrapper keeps live barcode scanning, image imports, UPI external app links, invoice print, and JSON/CSV export where supported. Camera behavior varies by device and Android System WebView version.
+
+## Direct APK download from BillNest
+
+The website also provides a **Download APK (test)** link in the mobile installation banner. Direct APK: https://funnyspace.github.io/funnyspace/billnest/download/BillNest-Android-Test.apk . The file is a debug-signed test build (not a production-signed Android release). Updates may require uninstalling and importing a backup, so prefer the PWA for daily business use.
