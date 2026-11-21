@@ -147,3 +147,9 @@ Run `node --test tests/*.test.mjs` to test both billing and accounting calculati
 - Expired items are visibly marked in red. This is an **in-app alert when you open or use BillNest**, not an OS push notification, email, or background reminder.
 - **Important:** A product currently has only one expiry date, not individual batch/lot expiry tracking. If multiple batches of the same product have different expiry dates, use separate SKUs for now. The scanner and checkout otherwise work as before.
 - On phones, Billing, Add product, and Accounting are three equal-width shortcuts on the same row. Raised vector icons render without downloading icon files.
+
+## Barcode scanner reliability (Version 16)
+
+The live camera now has an offline EAN-13 / UPC-A / EAN-8 decoding path that runs alongside the browser native scanner, without requiring a CDN connection. Code 128, QR and other formats still use the optional ZXing fallback. GTIN checksum validation prevents accepting partial or guessed retail numbers. UPC-A (12 digits) and EAN-13 starting with zero refer to the same product in inventory. Repeated frames of the same visible barcode do not add duplicate units to the cart. The existing photo scan and manual-entry options are retained.
+
+Use a clear view of the entire barcode with its white margins. At 10–20 cm, phones with long minimum focus distances may require a macro camera or a slightly greater working distance. Phone hardware and browser-specific autofocus still need physical device testing.
