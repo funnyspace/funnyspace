@@ -163,3 +163,13 @@ The scanner estimates light from camera pixels locally. On phones exposing torch
 ## Full-width mobile barcode preview (Version 18)
 
 On mobile phones, the live camera fills the full preview rather than appearing in a narrow letterboxed center column. The scanning guide spans almost the entire preview width. The offline retail decoder now examines the complete *visible* camera crop (matching CSS `object-fit: cover`) and samples rows from near the top to near the bottom, rather than using only a middle camera strip. Native and ZXing recognition, automatic focus and light, camera selection, photo scanning, manual entry, and stored inventory are unchanged. A tightly cropped view can hide labels outside the display; move the phone enough to keep the entire barcode including quiet zones in the visible camera view.
+
+## UPI payment QR (Version 22)
+
+1. Open **Settings > Store settings > UPI payment QR**, enter your receiving UPI ID (example: shop@upi), verify it, and save.
+2. In **Billing**, select **UPI**, add products and generate the invoice. BillNest creates an exact-amount INR QR for the saved payee, with a distinct invoice reference.
+3. The QR appears immediately after generation, on reopened invoices, and when printing unpaid UPI invoices.
+4. Check the payment in your bank or UPI app, then select **Record verified payment** and save the receipt. Displaying or scanning the QR never confirms payment. Partial payments reduce outstanding dues.
+5. The QR encoder is vendored locally from QRCode.js (davidshimjs, MIT license). See vendor-LICENSE-qrcodejs.txt. This is not a payment gateway or automatic bank-verification integration.
+
+Previous invoices and backups remain compatible. Previously paid UPI invoices remain paid.
