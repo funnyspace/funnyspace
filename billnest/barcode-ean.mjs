@@ -89,12 +89,30 @@ function tryScanline(binary){
   }
   return '';
 }
+/**
+ * Source rectangle visible inside a video element with object-fit: cover.
+ * Keeps the frame used for offline recognition aligned with the mobile preview.
+ */
+export function coverCameraRect(sourceWidth,sourceHeight,viewWidth,viewHeight){
+  const sw=Number(sourceWidth),sh=Number(sourceHeight);
+  if(!(sw>0&&sh>0))return {sx:0,sy:0,sw:0,sh:0};
+  const vw=Number(viewWidth),vh=Number(viewHeight);
+  if(!(vw>0&&vh>0))return {sx:0,sy:0,sw,sh};
+  const sourceRatio=sw/sh,viewRatio=vw/vh;
+  if(sourceRatio>viewRatio){
+    const cropWidth=sh*viewRatio;
+    return {sx:(sw-cropWidth)/2,sy:0,sw:cropWidth,sh};
+  }
+  const cropHeight=sw/viewRatio;
+  return {sx:0,sy:(sh-cropHeight)/2,sw,sh:cropHeight};
+}
+
 /** Decode barcodes in an ImageData from a canvas; no network, DOM or dependencies. */
 export function decodeRetailImageData(frame){
   if(!frame?.data||!frame.width||!frame.height)return '';
   const {data,width,height}=frame;
   if(width<190||height<20)return '';
-  const positions=[.49,.36,.61,.25,.74,.43,.55];
+  const positions=[.49,.36,.61,.25,.74,.43,.55,.12,.88,.19,.81];
   for(const fraction of positions){
     const row=Math.max(1,Math.min(height-2,Math.round(height*fraction)));
     const light=new Uint8Array(width),hist=new Uint32Array(256);
