@@ -1,6 +1,6 @@
 import {toPaise,rupees,money,today,calculateInvoice,summarizeProfit,expiryStatus,escapeHtml as e,csvEncode} from './logic.mjs';
 import {invoiceOutstanding,makeAccountingSummary,ACCOUNT_TYPES} from './accounting.mjs';
-import {barcodeAliases,decodeRetailImageData} from './barcode-ean.mjs';
+import {barcodeAliases,decodeRetailImageData,coverCameraRect} from './barcode-ean.mjs';
 import {barcodeSceneBrightness} from './scanner-assist.mjs';
 
 const STORE_KEY = 'billnest-workspace-v1';
@@ -414,13 +414,19 @@ function startLocalRetailReader(session){
    const video=$('#scannerVideo');
    if(video?.readyState>=2&&video.videoWidth>=320&&video.videoHeight>=120){
     const canvas=scanner.localCanvas||(scanner.localCanvas=document.createElement('canvas'));
-    const w=Math.min(video.videoWidth,1280),h=Math.max(80,Math.min(190,Math.round(w*.15)));
+    // Scan the whole visible video region, not a 44%-high horizontal strip.
+    // Match the mobile CSS object-fit:cover crop to what the user sees.
+    const preview=$('.scanner-preview');
+    const viewW=preview?.clientWidth||video.clientWidth||video.videoWidth;
+    const viewH=preview?.clientHeight||video.clientHeight||video.videoHeight;
+    const rect=coverCameraRect(video.videoWidth,video.videoHeight,viewW,viewH);
+    const w=Math.min(1280,Math.max(320,Math.round(rect.sw)));
+    const h=Math.min(580,Math.max(80,Math.round(w*rect.sh/rect.sw)));
     if(canvas.width!==w)canvas.width=w;
     if(canvas.height!==h)canvas.height=h;
     const ctx=canvas.getContext?.('2d',{willReadFrequently:true});
     if(ctx){
-     const sh=Math.max(80,Math.round(video.videoHeight*.44)),sy=Math.max(0,Math.round((video.videoHeight-sh)/2));
-     ctx.drawImage(video,0,sy,video.videoWidth,Math.min(sh,video.videoHeight),0,0,w,h);
+     ctx.drawImage(video,rect.sx,rect.sy,rect.sw,rect.sh,0,0,w,h);
      const frame=ctx.getImageData(0,0,w,h);
      autoAdjustScannerLight(frame,session);
      const code=decodeRetailImageData(frame);
@@ -435,6 +441,7 @@ function startLocalRetailReader(session){
  };
  loop();
 }
+
 async function startScannerCamera(){
  if(!scanner.open)return;
  releaseScannerCamera();
