@@ -153,3 +153,9 @@ Run `node --test tests/*.test.mjs` to test both billing and accounting calculati
 The live camera now has an offline EAN-13 / UPC-A / EAN-8 decoding path that runs alongside the browser native scanner, without requiring a CDN connection. Code 128, QR and other formats still use the optional ZXing fallback. GTIN checksum validation prevents accepting partial or guessed retail numbers. UPC-A (12 digits) and EAN-13 starting with zero refer to the same product in inventory. Repeated frames of the same visible barcode do not add duplicate units to the cart. The existing photo scan and manual-entry options are retained.
 
 Use a clear view of the entire barcode with its white margins. At 10–20 cm, phones with long minimum focus distances may require a macro camera or a slightly greater working distance. Phone hardware and browser-specific autofocus still need physical device testing.
+
+## Camera auto-focus and auto-light (Version 17)
+
+Live scanning keeps reading frames until it recognizes a barcode or you close the scanner. The phone's continuous autofocus is enabled when supported. Cameras offering only single-shot autofocus are periodically prompted to refocus while the scanner is searching. If the browser does not expose focus controls, the phone handles focus itself.
+
+The scanner estimates light from camera pixels locally. On phones exposing torch control, sustained dark frames automatically enable the flashlight. It stays on during the session to prevent repeated flashing. The Light button cycles **Auto → On → Off → Auto**, so you can override automation. The light is turned off when scanning closes. Photo scanning and manual entry are unchanged. Actual focus distance and torch support still depend on phone hardware, the selected lens, and the browser.
