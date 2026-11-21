@@ -491,7 +491,7 @@ function scannerMarkup(mode){
  <div class="scanner-optics"><div id="scannerCameraWrap" class="scanner-camera-pick" hidden><label for="scannerCamera">Camera lens (choose Macro for close labels)</label><select id="scannerCamera" aria-label="Choose camera lens"></select></div><div id="scannerZoomWrap" class="scanner-zoom" hidden><div><label for="scannerZoom">Zoom</label><output id="scannerZoomValue" for="scannerZoom">1.0×</output></div><input id="scannerZoom" type="range" min="1" max="2" step="0.1" value="1" aria-label="Camera optical or digital zoom"></div></div>
  <div class="scanner-actions"><button type="button" class="btn" data-action="scanner-focus">◎ Refocus</button><button type="button" class="btn" data-action="scanner-switch">↻ Switch</button><button type="button" class="btn" data-action="scanner-torch" id="scannerTorch" title="Tap to cycle Auto, On, Off" hidden>⚡ Light: Auto</button><button type="button" class="btn" data-action="scanner-retry">Retry</button></div>
  <label class="scanner-photo-button" for="barcodePhoto">📷 Scan from photo / camera</label><input class="scanner-photo-input" id="barcodePhoto" type="file" accept="image/*" aria-label="Scan barcode from a photo or camera">
- <p class="scanner-photo-hint">Scanning continues until a code is found or you close the camera. Autofocus and automatic light work on supported phones. Tap Light to cycle Auto, On and Off. If close-up bars remain blurry, try Macro, a greater distance or Scan from photo.</p>
+ <p class="scanner-photo-hint">Scanning continues until a code is found or you close the camera. Autofocus and automatic light work on supported phones. Tap Light to cycle Auto, On and Off. If the image is blurry, try Refocus, adjust the distance, or Scan from photo.</p>
  <form id="scanManualForm" class="scanner-manual-form"><label for="manualBarcode">Enter the barcode manually</label><div class="scanner-manual-row"><input id="manualBarcode" name="barcode" placeholder="EAN, UPC, barcode or SKU" autocomplete="off" autocapitalize="off" inputmode="text" maxlength="80" required><button class="btn btn-primary" type="submit">Use code</button></div></form>
  <p class="scanner-hint">HTTPS and camera permission are required. Your camera video is not uploaded. Barcode prices and product details come from your own inventory.</p>
  </div></div>`;
@@ -678,15 +678,15 @@ async function applyScannerZoom(value){
   await track.applyConstraints({advanced:[{zoom:next}]});
   scanner.zoom=next;
   const output=$('#scannerZoomValue');if(output)output.textContent=next.toFixed(1)+'×';
- }catch{scannerStatus('Zoom is unavailable on this camera lens. Try Macro or Refocus.','error')}
+ }catch{scannerStatus('Zoom is unavailable on this camera. Try Refocus.','error')}
 }
 async function refocusScanner(){
- const track=scannerCameraTrack();if(!track?.applyConstraints)return scannerStatus('Automatic focus is controlled by your phone. Try the Macro lens or photo scanner.');
+ const track=scannerCameraTrack();if(!track?.applyConstraints)return scannerStatus('Automatic focus is controlled by your phone. Try the photo scanner.');
  let modes=[];try{modes=track.getCapabilities?.()?.focusMode||[]}catch{}
  try{
   if(modes.includes('single-shot'))await track.applyConstraints({advanced:[{focusMode:'single-shot'}]});
   if(modes.includes('continuous'))await track.applyConstraints({advanced:[{focusMode:'continuous'}]});
-  scannerStatus(modes.length?'Refocusing. Hold the barcode at 10–20 cm until the lines are sharp.':'This camera does not expose manual focus. Select Macro if available.');
+  scannerStatus(modes.length?'Refocusing. Hold the barcode steady until the lines are sharp.':'This camera does not expose manual focus. Try moving the barcode slightly farther away.');
  }catch{scannerStatus('Focus is controlled by the device. Try a different rear camera or photo scanning.','error')}
 }
 async function getNativeDetector(){
@@ -752,7 +752,7 @@ async function startZXingScanner(zxing,session){
   scanner.controls=controls;
   scanner.stream=video.srcObject||scanner.stream;
   await configureScannerTrack();
-  scannerStatus('Close-range reader ready. Keep the whole barcode sharp at 10–20 cm.');
+  scannerStatus('Barcode reader ready. Keep the complete barcode in view.');
  }catch(err){
   if(!scanner.open||scanner.session!==session)return;
   console.warn('Enhanced barcode scanner failed:',err);
