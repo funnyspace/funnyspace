@@ -174,9 +174,13 @@ test('business logo upload, custom invoice footer, escaped messages and invoice 
  }finally{globalThis.document.createElement=oldCreate;globalThis.Image=oldImage;globalThis.FormData=oldFormData;clickAction('close-modal')}
 });
 
-test('dashboard shows gross profit and product-wise profit, range and product search',()=>{
+test('profit and loss lives under Reports, not Dashboard; date and product filters work',()=>{
  clickGo('dashboard');
+ assert.doesNotMatch(node('#main').innerHTML,/id="profitTitle"/);
+ assert.match(node('#main').innerHTML,/Sales overview/);
+ clickGo('reports');
  let markup=node('#main').innerHTML;
+ assert.match(markup,/Business reports/);
  assert.match(markup,/Profit &amp; loss/);
  assert.match(markup,/Product-wise profit \/ loss/);
  assert.match(markup,/Net sales \(excl\. GST\)/);
