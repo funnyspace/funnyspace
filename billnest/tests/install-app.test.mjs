@@ -20,6 +20,8 @@ test('install banner and offline service worker are wired into the live website'
  assert.match(html,/id="installAppCard"/);
  assert.match(html,/id="installAppButton"/);
  assert.match(html,/install-app\.js\?v=25/);
+ assert.match(html,/download\/BillNest-Android-Test\.apk/);
+ assert.match(html,/styles\.css\?v=26/);
  assert.match(js,/beforeinstallprompt/);
  assert.match(js,/serviceWorker\.register\('\.\/sw\.js'/);
  assert.match(sw,/caches\.open\(CACHE\)/);
