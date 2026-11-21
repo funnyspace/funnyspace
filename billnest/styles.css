@@ -292,3 +292,7 @@
   .topbar .top-new{width:42px;min-width:42px;min-height:42px;padding:0;gap:0;font-size:0}
   .topbar .top-new .plus-sign{font-size:23px;line-height:1}
 }
+
+/* Scanner v17: three-state light control and automatic low-light assistance */
+#scannerTorch:not([hidden]){font-weight:760;min-width:113px;border-color:#87c8ac;background:#e7f6ed;color:#135d48}
+#scannerTorch[hidden]{display:none!important}
