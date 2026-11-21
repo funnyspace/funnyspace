@@ -199,3 +199,37 @@
 @media print{.profit-panel{break-inside:auto}}
 
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+
+/* Cashbook and accounting: readable on desktop and narrow phones. */
+.accounting-dashboard-strip{display:flex;align-items:center;gap:18px;padding:18px 20px;margin-bottom:18px}
+.accounting-dashboard-strip>div{flex:1;min-width:0;display:flex;flex-direction:column;gap:5px}
+.accounting-dashboard-strip small,.accounting-dashboard-strip span{color:#66788b;font-size:11px;line-height:1.4}
+.accounting-dashboard-strip strong{font-size:21px;font-weight:800;letter-spacing:-.4px}
+.accounting-positive{color:#117656!important}.accounting-negative{color:#b83a42!important}
+.accounting-toolbar{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:12px 0}
+.accounting-toolbar>label{font-weight:700;font-size:12px;color:#34485b}
+.accounting-period-hint{font-size:11px;line-height:1.4;color:#7a8797;flex:1}
+.accounting-card-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:16px 0}
+.accounting-metric{padding:19px;display:flex;flex-direction:column;gap:8px;min-width:0}
+.accounting-metric span{color:#66788b;font-size:12px;font-weight:700}
+.accounting-metric strong{font-size:22px;font-weight:800;letter-spacing:-.5px;overflow-wrap:anywhere}
+.accounting-metric small{font-size:11px;line-height:1.5;color:#788a9b}
+.accounting-two-col{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr);gap:15px;margin-bottom:18px}
+.accounting-block{padding:20px;min-width:0;overflow:hidden}
+.accounting-block .section-title{align-items:center;gap:12px;flex-wrap:wrap}
+.accounting-block .data-table{min-width:490px}
+.accounting-block .data-table small{display:block;margin-top:3px;color:#7c8c9b;font-size:10px}
+.accounting-category-row{display:flex;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px solid #eef2f5;font-size:13px}
+.accounting-category-row strong{white-space:nowrap}
+.accounting-ledger{margin-bottom:16px}
+.accounting-ledger .data-table{min-width:735px}
+.accounting-ledger-actions{display:flex;gap:9px;align-items:center;flex-wrap:wrap}
+.accounting-search{max-width:235px;min-width:125px;padding:9px 11px;border:1px solid #d8e3ea;border-radius:9px;font:inherit;font-size:13px}
+.accounting-note{font-size:11px;line-height:1.65;color:#657688;margin:12px 0 0}
+.accounting-warning{padding:11px 14px;border-radius:8px;color:#825622;background:#fff8e9;font-size:12px}
+.accounting-final-note{margin-bottom:24px}
+@media(max-width:1050px){.accounting-card-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.accounting-two-col{grid-template-columns:1fr}}
+@media(max-width:700px){.accounting-dashboard-strip{flex-wrap:wrap;padding:15px;gap:12px}.accounting-dashboard-strip>div{min-width:42%}.accounting-dashboard-strip .btn{width:100%}.accounting-card-grid{gap:9px}.accounting-metric{padding:14px;min-height:122px}.accounting-metric span{font-size:11px}.accounting-metric strong{font-size:17px}.accounting-block{padding:15px}.accounting-ledger-actions{width:100%}.accounting-search{flex:1;max-width:none}.accounting-period-hint{flex-basis:100%}}
+@media(max-width:350px){.accounting-card-grid{grid-template-columns:1fr}.accounting-dashboard-strip>div{min-width:100%}}
+
+@media(max-width:700px){.mobile-bottom-nav{grid-template-columns:repeat(5,minmax(0,1fr))}.mobile-tab{font-size:9px;gap:3px;padding:7px 1px}.mobile-tab-icon{font-size:19px}}
