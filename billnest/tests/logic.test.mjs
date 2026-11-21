@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {calculateInvoice,csvEncode,toPaise,today,escapeHtml} from '../logic.mjs';
+import {calculateInvoice,csvEncode,toPaise,today,escapeHtml,expiryStatus} from '../logic.mjs';
 const p={p1:{id:'p1',name:'Pen',sku:'PEN',price:100,stock:5,gst:18,unit:'pcs'}};
 const cart=[{productId:'p1',qty:2}];
 test('exclusive same-state GST totals and stock-independent calculation',()=>{
@@ -70,4 +70,16 @@ test('profit date filters and zero-sales products',()=>{
  assert.equal(stat.sales,10000);
  assert.equal(stat.profit,3000);
  assert.equal(stat.productRows.find(p=>p.productId==='untouched').qty,0);
+});
+
+
+test('expiry alerts start 30 calendar days before expiry, including month boundaries',()=>{
+ assert.deepEqual(expiryStatus('', '2026-11-21'),{state:'none',days:null});
+ assert.deepEqual(expiryStatus('2026-12-21','2026-11-21'),{state:'soon',days:30});
+ assert.equal(expiryStatus('2026-12-22','2026-11-21').state,'ok');
+ assert.deepEqual(expiryStatus('2026-11-21','2026-11-21'),{state:'soon',days:0});
+ assert.deepEqual(expiryStatus('2026-11-20','2026-11-21'),{state:'expired',days:-1});
+ assert.deepEqual(expiryStatus('2028-03-01','2028-02-29'),{state:'soon',days:1});
+ assert.equal(expiryStatus('2026-02-30','2026-02-01').state,'invalid');
+ assert.equal(expiryStatus('not a date').state,'invalid');
 });
