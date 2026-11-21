@@ -313,3 +313,9 @@
 @media (max-width:700px){
   #scannerCameraWrap{display:none!important}
 }
+
+/* Mobile billing: keep Scan Barcode and Invoice History side by side. */
+@media (max-width:700px){
+  .page-intro .toolbar-actions .btn[data-action="scan-billing"]{grid-column:auto;min-height:44px;font-size:12px;padding:8px 6px}
+  .page-intro .toolbar-actions .btn[data-go="sales"]{min-width:0;min-height:44px;font-size:12px;padding:8px 6px}
+}
