@@ -112,3 +112,12 @@ Go to **Settings → Business details** to upload a **PNG, JPG or WebP** shop lo
 Under **Settings → Invoice footer message**, customise **Thank-you message** and **Second footer line**. Leave either field empty to hide that line. Both lines are centred at the bottom of new invoices. The existing **Invoice Terms & Conditions** field remains separate and prints at the lower-left beside the invoice totals. Past invoices retain their original logo, terms and footer text because they capture the settings active when the invoice was issued.
 
 All settings, logo versions and invoices are saved only in this browser's local workspace. A **Download JSON** backup also contains the logo assets. Do not clear browser storage without backing up your store data.
+
+## Dashboard profit and loss
+
+The dashboard shows gross profit or loss for the last 7, 30 or 90 days, or all time. Search any product by name or SKU for its sales, cost, gross profit, margin and profit/loss status. Products with no sales show no realized gross profit.
+
+- **Gross profit = net invoiced sales (excluding GST and after discounts) minus purchase cost for units sold.** This is not net business profit: rent, freight, wages, returns, fees and other operating costs are not included. Credit/unpaid invoices are counted as invoiced sales.
+- On **new invoices**, purchase costs are saved with each invoice line in integer paise, so editing current product costs does not change the historical gross profit. Existing invoices are never mutated during display.
+- On **older invoices** without cost snapshots, historical gross profit is **estimated from the product's current purchase cost**, and the dashboard warns about these estimates. If a product has been deleted and its cost cannot be found, its sales are included in the sales total but excluded from the partial gross profit calculation, with an explicit warning.
+- Fill purchase cost for each product accurately, and use accounting software for financial net profit, tax reporting, and adjustments.
