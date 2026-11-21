@@ -320,3 +320,19 @@ test('mobile topbar headings stay left-aligned across all sections',async()=>{
  }
  clickGo('dashboard');
 });
+
+test('mobile billing scan barcode and invoice history share one row',async()=>{
+ const {readFileSync}=await import('node:fs');
+ const css=readFileSync(new URL('../styles.css',import.meta.url),'utf8');
+ const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
+ clickGo('billing');
+ const markup=node('#main').innerHTML;
+ assert.match(markup,/data-action="scan-billing"[^>]*>[^<]*Scan barcode/);
+ assert.match(markup,/data-go="sales"[^>]*>Invoice history/);
+ const mobile=css.slice(css.lastIndexOf('/* Mobile billing: keep Scan Barcode'));
+ assert.match(mobile,/@media \(max-width:700px\)/);
+ assert.match(mobile,/\.page-intro \.toolbar-actions \.btn\[data-action="scan-billing"\]\{grid-column:auto/);
+ assert.match(mobile,/\.page-intro \.toolbar-actions \.btn\[data-go="sales"\]/);
+ assert.match(html,/styles\.css\?v=21/);
+ clickGo('dashboard');
+});
