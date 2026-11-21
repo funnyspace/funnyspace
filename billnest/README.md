@@ -187,3 +187,11 @@ See [CLOUD_SETUP.md](CLOUD_SETUP.md) for complete instructions, security conside
 ## BillNest brand identity (Version 24)
 
 The website now uses the signature receipt-shaped **B** icon with a white upper half, emerald-green lower half and receipt-edge silhouette. The sidebar lockup retains the lowercase **billnest.** wordmark and **INVENTORY + BILLING** subtitle. The browser favicon uses the same B mark on a navy tile; the mobile header displays a compact mark where horizontal space allows. The vector master is `logo-mark.svg`. The rest of Billing, Inventory, Cloud Backup, and the saved business workspace remain unchanged.
+
+## Install BillNest on Android (Version 25)
+
+BillNest is now an installable **Progressive Web App (PWA)**. In Android Chrome, open the BillNest site and select **Install App** from the mobile banner, or Chrome's menu **Install app** / **Add to Home screen**. The installed app launches standalone with the receipt-shaped BillNest B icon and starts on the existing dashboard. The web app's shell, scanner code, styling, QR library and app icons are cached by `sw.js` for offline access. All customer/workspace data continues to be stored locally; cloud backup still requires optional Supabase configuration.
+
+**Important:** An Android WebView APK stores browser data separately from Chrome. Before switching to an APK, export a BillNest JSON backup in Settings, then import it within the installed app. Never assume installation automatically migrates records.
+
+See the Android APK source and build instructions under `android/`. A workflow provides downloadable test APK build artifacts when GitHub Actions is enabled. Public distribution and production updates should use an appropriately protected, persistent release signing key.
