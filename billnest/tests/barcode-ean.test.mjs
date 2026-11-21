@@ -46,3 +46,21 @@ test('No fabricated barcode from blank, noise or invalid checksum',()=>{
  assert.equal(decodeRetailImageData(blank),'');
  assert.equal(decodeRetailBits(makeBits('5901234123458')),'');
 });
+test('cover camera crop matches full-width phone preview', async()=>{
+ const {coverCameraRect}=await import('../barcode-ean.mjs');
+ assert.deepEqual(coverCameraRect(720,1280,360,300),{sx:0,sy:340,sw:720,sh:600});
+ assert.deepEqual(coverCameraRect(1920,1080,300,450),{sx:600,sy:0,sw:720,sh:1080});
+});
+test('full-frame scan can recognize barcode near the lower preview edge',()=>{
+ const code='5901234123457',bits=makeBits(code);
+ const width=1100,height=600,module=4,start=Math.round((width-bits.length*module)/2);
+ const data=new Uint8ClampedArray(width*height*4);
+ for(let y=0;y<height;y++)for(let x=0;x<width;x++){
+  const m=Math.floor((x-start)/module);
+  const black=y>height*.84&&y<height*.94&&m>=0&&m<bits.length&&bits[m]==='1';
+  const pos=(y*width+x)*4;
+  data[pos]=data[pos+1]=data[pos+2]=black?20:240;
+  data[pos+3]=255;
+ }
+ assert.equal(decodeRetailImageData({data,width,height}),code);
+});
