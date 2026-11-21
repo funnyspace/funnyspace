@@ -148,14 +148,18 @@ Run `node --test tests/*.test.mjs` to test both billing and accounting calculati
 - **Important:** A product currently has only one expiry date, not individual batch/lot expiry tracking. If multiple batches of the same product have different expiry dates, use separate SKUs for now. The scanner and checkout otherwise work as before.
 - On phones, Billing, Add product, and Accounting are three equal-width shortcuts on the same row. Raised vector icons render without downloading icon files.
 
-## Barcode scanner reliability (Version 16)
+## Reliable barcode scanning (v16)
 
-The live camera now has an offline EAN-13 / UPC-A / EAN-8 decoding path that runs alongside the browser native scanner, without requiring a CDN connection. Code 128, QR and other formats still use the optional ZXing fallback. GTIN checksum validation prevents accepting partial or guessed retail numbers. UPC-A (12 digits) and EAN-13 starting with zero refer to the same product in inventory. Repeated frames of the same visible barcode do not add duplicate units to the cart. The existing photo scan and manual-entry options are retained.
+Live scanning includes an offline EAN-13, EAN-8 and UPC-A decoder alongside the browser native detector and optional ZXing reader for Code 128, QR and other formats. Retail decodes are accepted only after the GTIN check digit validates; repeated reads use a cooldown to prevent accidental duplicate items. UPC-A and EAN-13-with-leading-zero match the same inventory product. Camera video is processed on the device and not uploaded. The photo/manual options remain available.
 
-Use a clear view of the entire barcode with its white margins. At 10–20 cm, phones with long minimum focus distances may require a macro camera or a slightly greater working distance. Phone hardware and browser-specific autofocus still need physical device testing.
+For a close-range barcode (10–20 cm), use the rear or macro camera in good light and keep the complete bars, including white margins, within the guide. Some devices cannot autofocus at 10 cm; moving back to 20–30 cm may be required.
 
 ## Camera auto-focus and auto-light (Version 17)
 
 Live scanning keeps reading frames until it recognizes a barcode or you close the scanner. The phone's continuous autofocus is enabled when supported. Cameras offering only single-shot autofocus are periodically prompted to refocus while the scanner is searching. If the browser does not expose focus controls, the phone handles focus itself.
 
 The scanner estimates light from camera pixels locally. On phones exposing torch control, sustained dark frames automatically enable the flashlight. It stays on during the session to prevent repeated flashing. The Light button cycles **Auto → On → Off → Auto**, so you can override automation. The light is turned off when scanning closes. Photo scanning and manual entry are unchanged. Actual focus distance and torch support still depend on phone hardware, the selected lens, and the browser.
+
+## Full-width mobile barcode preview (Version 18)
+
+On mobile phones, the live camera fills the full preview rather than appearing in a narrow letterboxed center column. The scanning guide spans almost the entire preview width. The offline retail decoder now examines the complete *visible* camera crop (matching CSS `object-fit: cover`) and samples rows from near the top to near the bottom, rather than using only a middle camera strip. Native and ZXing recognition, automatic focus and light, camera selection, photo scanning, manual entry, and stored inventory are unchanged. A tightly cropped view can hide labels outside the display; move the phone enough to keep the entire barcode including quiet zones in the visible camera view.
