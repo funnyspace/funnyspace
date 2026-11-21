@@ -386,3 +386,7 @@
  .install-app-card:not([hidden]){flex-wrap:wrap}
  #installAppButton{margin-left:auto}
 }
+
+/* Direct APK option alongside the one-tap PWA install button. */
+.install-apk-download{font-size:11px;font-weight:750;text-decoration:underline;color:#12684f;max-width:max-content}
+.install-apk-download:hover{color:#074a38}
