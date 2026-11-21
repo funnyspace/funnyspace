@@ -278,3 +278,17 @@
 .mobile-tab-icon.nav-icon-3d{width:25px;height:25px;margin:0 auto}
 .mobile-tab-icon.nav-icon-3d svg{width:15px;height:15px}
 .mobile-tab.active .nav-icon-3d{background:linear-gradient(145deg,#fff,#c8f5de 60%,#9bd5b9);color:#08765e;border-color:#99c7b1}
+
+/* Mobile section headers align left, immediately after the menu control. */
+@media (max-width:700px){
+  .topbar{justify-content:flex-start;gap:10px}
+  .topbar .mobile-menu{display:inline-flex;align-items:center;justify-content:center;flex:0 0 36px;width:36px;min-height:40px;margin:0;padding:0}
+  .topbar .page-heading{flex:1 1 auto;min-width:0;width:auto;margin:0;text-align:left;align-self:center}
+  .topbar .page-heading h1{margin:0;text-align:left;line-height:1.25}
+  .topbar .top-actions{flex:0 0 auto;margin-left:auto}
+  .page-intro,.page-intro>div:first-child,.page-intro h2,.page-intro p,.section-title h3{text-align:left}
+}
+@media (max-width:480px){
+  .topbar .top-new{width:42px;min-width:42px;min-height:42px;padding:0;gap:0;font-size:0}
+  .topbar .top-new .plus-sign{font-size:23px;line-height:1}
+}
