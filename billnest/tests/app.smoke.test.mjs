@@ -16,6 +16,17 @@ globalThis.localStorage={getItem:k=>items.get(k)||null,setItem:(k,v)=>items.set(
 await import('../app.js');
 function clickAction(action,id){listeners.click({target:{closest:selector=>selector==='[data-action]'?{dataset:{action,id},preventDefault(){}}:null},preventDefault(){}})}
 function clickGo(page){listeners.click({target:{closest:selector=>selector==='[data-go]'?{dataset:{go:page}}:null},preventDefault(){}})}
+test('all pages show just the page title without workspace breadcrumbs',async()=>{
+ const {readFileSync}=await import('node:fs');
+ const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
+ assert.doesNotMatch(html,/id="breadcrumb"/);
+ assert.doesNotMatch(html,/WORKSPACE\s*\/\s*(?:DASHBOARD|INVENTORY|BILLING|REPORTS)/i);
+ for(const page of ['dashboard','inventory','billing','sales','customers','accounting','reports','settings']){
+  clickGo(page);
+  assert.doesNotMatch(node('#main').innerHTML,/WORKSPACE\s*\/\s*(?:DASHBOARD|INVENTORY|BILLING|REPORTS)/i);
+ }
+ clickGo('dashboard');
+});
 test('dashboard renders sample stock and sales',()=>{assert.match(node('#main').innerHTML,/exploring a demo workspace/);assert.match(node('#main').innerHTML,/Recent invoices/)});
 test('inventory screen lists stock entries',()=>{clickGo('inventory');assert.match(node('#main').innerHTML,/A4 Notebook/);assert.match(node('#main').innerHTML,/Marker Set/)});
 test('billing generates invoice and subtracts stock',()=>{
