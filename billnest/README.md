@@ -174,6 +174,44 @@ On mobile phones, the live camera fills the full preview rather than appearing i
 
 Previous invoices and backups remain compatible. Previously paid UPI invoices remain paid.
 
+## Email and mobile OTP sign-in
+
+BillNest now provides a **Sign in** button in the top bar. Users can sign up or sign in with
+an **email address** or a **mobile number** by entering a one-time verification code.
+The first successful verification creates the account if sign-ups are enabled in Supabase.
+Existing users sign in to their account. No password is stored by BillNest.
+
+**One-time setup for the website owner:**
+
+1. Create a Supabase project or use the existing project configured for cloud backup.
+2. In **Authentication > Providers**, enable Email and Phone.
+3. In **Authentication > Email Templates**, change the Magic Link/OTP template to include
+   `{{ .Token }}`, so email sign-in sends a numeric OTP instead of only a clickable link.
+4. Configure an SMS sending provider under the Phone provider. SMS is generally not free.
+   For India, confirm applicable TRAI/DLT requirements with your SMS provider.
+5. Run `supabase-schema.sql` in the project's SQL Editor for private cloud backups with RLS.
+6. Open `auth-config.js` and set `url` to your public Supabase project URL and `key`
+   to the **public publishable/anon key**. **Never put a secret or service_role key in
+   GitHub Pages.** This public config lets all users access the same authentication project.
+   For private testing, it is also possible to leave the file blank and configure
+   **Settings > Cloud backup** individually in a browser.
+7. Deploy the updated files and test both flows with real email and phone numbers.
+
+**How user data works:** Guest/offline billing remains available without signing in.
+After sign-in, each account's **local browser workspace** is stored under its own key.
+Switching accounts or signing out never deletes another workspace. To transfer an existing
+offline store into a new account, select **My Account > Copy offline store to this account**.
+This copy option is intentionally shown only when that account does not yet have local data.
+Always download a JSON backup before any important migration.
+
+**Security limits:** BillNest is still a client-side prototype. Account selection isolates
+the UI's local data but does **not** encrypt localStorage or prevent someone with direct
+browser/device access from inspecting it. Supabase RLS protects remote backups, not browser
+files. A real multi-user production POS needs server-enforced authorization, device/session
+controls, audit logging, and a database for protected invoice data. Cloud backup is not
+automatic live multi-device synchronization. Email and phone credentials are not
+automatically linked to the same Supabase account; account linking needs a separate verified flow.
+
 ## Cloud backup when online (Version 23)
 
 BillNest now includes an optional automatic cloud backup panel in **Settings > Cloud backup**. Changes are saved in the browser first, then uploaded to the signed-in Supabase project while online. Offline changes are queued for the next connection. There is no automatic cross-device data merge.
