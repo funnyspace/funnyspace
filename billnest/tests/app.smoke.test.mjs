@@ -193,3 +193,73 @@ test('dashboard shows gross profit and product-wise profit, range and product se
  assert.doesNotMatch(markup,/A4 Notebook/);
  input({target:{dataset:{search:'profit'},value:''}});
 });
+
+test('accounting navigation, dashboard shortcut and mobile Accounts tab',()=>{
+ clickGo('dashboard');
+ assert.match(node('#navigation').innerHTML,/Accounting/);
+ assert.match(node('#mobileBottomNav').innerHTML,/Accounts/);
+ assert.match(node('#main').innerHTML,/Estimated net profit/);
+ clickGo('accounting');
+ assert.match(node('#main').innerHTML,/Accounting &(?:amp;)? cashbook/);
+ assert.match(node('#main').innerHTML,/Cash balance/);
+ assert.match(node('#main').innerHTML,/Customer receivables/);
+ assert.match(node('#main').innerHTML,/Cashbook/);
+ clickAction('add-accounting');
+ assert.match(node('#modalLayer').innerHTML,/id="accountingForm"/);
+ clickAction('close-modal');
+});
+
+test('accounting transactions, opening balances, and receipts persist with proper balances',()=>{
+ const OldFormData=globalThis.FormData;
+ globalThis.FormData=class {constructor(form){this.entries=Object.entries(form.values)}*[Symbol.iterator](){yield* this.entries}};
+ const submit=(id,values)=>listeners.submit({target:{id,values,matches:s=>s.split(',').some(x=>x.trim()===`#${id}`)},preventDefault(){}});
+ try{
+  clickGo('accounting');
+  clickAction('opening-balances');
+  submit('openingForm',{cash:'1000',bank:'500'});
+  let db=JSON.parse(items.get('billnest-workspace-v1'));
+  assert.equal(db.accounting.opening.cash,100000);
+  assert.equal(db.accounting.opening.bank,50000);
+  clickAction('add-accounting');
+  submit('accountingForm',{type:'expense',date:'2026-11-21',amount:'250',account:'cash',toAccount:'bank',category:'Rent <danger>',description:'Shop rent'});
+  db=JSON.parse(items.get('billnest-workspace-v1'));
+  assert.equal(db.accounting.entries.at(-1).amount,25000);
+  assert.match(node('#main').innerHTML,/Shop rent/);
+  assert.match(node('#main').innerHTML,/Rent &lt;danger&gt;/);
+  assert.match(node('#main').innerHTML,/Operating expenses/);
+  clickAction('add-accounting');
+  submit('accountingForm',{type:'transfer',date:'2026-11-21',amount:'100',account:'cash',toAccount:'bank',category:'',description:'Cash to bank'});
+  db=JSON.parse(items.get('billnest-workspace-v1'));
+  assert.equal(db.accounting.entries.length,2);
+  assert.equal(db.accounting.entries.at(-1).type,'transfer');
+  clickAction('delete-accounting',db.accounting.entries.at(-1).id);
+  db=JSON.parse(items.get('billnest-workspace-v1'));
+  assert.equal(db.accounting.entries.length,1);
+  clickGo('billing');
+  const item=db.products.find(p=>p.stock>0);
+  clickAction('add-to-cart',item.id);
+  listeners.change({target:{id:'billPayment',value:'Credit',dataset:{}}});
+  clickAction('save-invoice');
+  db=JSON.parse(items.get('billnest-workspace-v1'));
+  const credit=db.invoices.at(-1);
+  assert.equal(credit.paid,false);
+  clickGo('accounting');
+  assert.match(node('#main').innerHTML,new RegExp(credit.number));
+  clickAction('record-receipt',credit.id);
+  assert.match(node('#modalLayer').innerHTML,/id="receiptForm"/);
+  submit('receiptForm',{amount:'10.00',date:credit.date,account:'bank',description:'First part'});
+  db=JSON.parse(items.get('billnest-workspace-v1'));
+  assert.equal(db.accounting.entries.at(-1).type,'customer-receipt');
+  assert.equal(db.invoices.at(-1).paid,false);
+  clickAction('record-receipt',credit.id);
+  const due=db.invoices.at(-1).total-1000;
+  submit('receiptForm',{amount:(due/100).toFixed(2),date:credit.date,account:'bank',description:'Final payment'});
+  db=JSON.parse(items.get('billnest-workspace-v1'));
+  assert.equal(db.invoices.at(-1).paid,true);
+  assert.doesNotMatch(node('#main').innerHTML,new RegExp('data-action="record-receipt" data-id="'+credit.id+'"'));
+  assert.equal(db.accounting.entries.filter(x=>x.invoiceId===credit.id).length,2);
+  clickAction('delete-accounting',db.accounting.entries.at(-1).id);
+  db=JSON.parse(items.get('billnest-workspace-v1'));
+  assert.equal(db.invoices.at(-1).paid,false);
+ }finally{globalThis.FormData=OldFormData;clickAction('close-modal')}
+});
