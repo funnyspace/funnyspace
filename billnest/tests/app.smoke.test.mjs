@@ -173,3 +173,23 @@ test('business logo upload, custom invoice footer, escaped messages and invoice 
   assert.match(node('#modalLayer').innerHTML,/For help: call 12345/);
  }finally{globalThis.document.createElement=oldCreate;globalThis.Image=oldImage;globalThis.FormData=oldFormData;clickAction('close-modal')}
 });
+
+test('dashboard shows gross profit and product-wise profit, range and product search',()=>{
+ clickGo('dashboard');
+ let markup=node('#main').innerHTML;
+ assert.match(markup,/Profit &amp; loss/);
+ assert.match(markup,/Product-wise profit \/ loss/);
+ assert.match(markup,/Net sales \(excl\. GST\)/);
+ assert.match(markup,/id="profitRange"/);
+ assert.match(markup,/data-search="profit"/);
+ const change = listeners.change;
+ change({target:{id:'profitRange',value:'all',dataset:{}}});
+ markup=node('#main').innerHTML;
+ assert.match(markup,/<option value="all" selected>/);
+ const input=listeners.input;
+ input({target:{dataset:{search:'profit'},value:'Terms test item'}});
+ markup=node('#main').innerHTML;
+ assert.match(markup,/Terms test item/);
+ assert.doesNotMatch(markup,/A4 Notebook/);
+ input({target:{dataset:{search:'profit'},value:''}});
+});
