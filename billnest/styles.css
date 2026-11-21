@@ -333,3 +333,26 @@
 .invoice-modal .modal-footer{flex-wrap:wrap;gap:8px}
 @media(max-width:700px){.invoice-upi-payment{padding:12px;margin-top:16px}.invoice-upi-amount{font-size:20px}}
 @media print{.invoice-upi-payment{background:#fff;break-inside:avoid;page-break-inside:avoid}.invoice-upi-open{display:none!important}.invoice-upi-qr{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+
+/* Cloud backup: opt-in local-first online snapshots */
+.cloud-backup-panel{margin-bottom:18px;border-color:#b7ddd1}
+.cloud-backup-panel h3{display:flex;align-items:center;gap:7px}
+.cloud-backup-status{display:flex;align-items:center;gap:8px;margin:13px 0;padding:10px 12px;background:#f2f7f5;border:1px solid #dae8e2;border-radius:9px;font-size:12px;font-weight:700;color:#315b51;line-height:1.4}
+.cloud-indicator-dot{display:inline-block;width:9px;height:9px;border-radius:100%;background:#abb4bc;flex:none}
+.cloud-indicator-dot.cloud-online{background:#168769;box-shadow:0 0 0 3px #daf2e7}
+.cloud-small-form{display:flex;flex-direction:column;gap:8px;margin:14px 0}
+.cloud-small-form label{font-size:12px;font-weight:700;color:#374c60}
+.cloud-small-form input{width:100%;min-height:40px;min-width:0;border:1px solid #dce4e8;border-radius:8px;padding:9px 11px;font-size:13px;background:#fff}
+.cloud-small-form button{align-self:start}
+.cloud-message{background:#ecfaf3;color:#175f49;border-radius:8px;padding:9px 12px;line-height:1.5;font-size:12px}
+.cloud-message-error{color:#a23431;background:#fff2ef}
+.cloud-signin-area{border-top:1px solid #e2e9e7;padding-top:10px}
+.cloud-action-row{display:flex;gap:8px;flex-wrap:wrap;margin:15px 0}
+.cloud-backup-list{display:flex;flex-direction:column;gap:9px;padding:8px 0 4px}
+.cloud-backup-row{display:flex;justify-content:space-between;align-items:center;gap:10px;border:1px solid #e1e9e6;border-radius:10px;padding:10px;background:#fff}
+.cloud-backup-row div{min-width:0}
+.cloud-backup-row strong{display:block;font-size:12px;color:#233c50}
+.cloud-backup-row small{display:block;overflow-wrap:anywhere;color:#6d7f89;margin-top:4px;font-size:11px}
+.cloud-backup-row button{flex:none}
+.cloud-privacy-note{font-size:11px!important;line-height:1.55;color:#6e7d87;margin:14px 0 0}
+@media(max-width:700px){.cloud-small-form button,.cloud-action-row .btn{min-height:43px}.cloud-backup-panel{padding:16px}.cloud-backup-row{flex-wrap:wrap}}
