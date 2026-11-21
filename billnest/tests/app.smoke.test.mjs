@@ -387,3 +387,15 @@ test('UPI billing generates an exact-amount pending invoice QR and verifies rece
   clickGo('dashboard');
  }
 });
+
+test('cloud backup is optional, saves locally first and requires confirmed restore',async()=>{
+ const {readFileSync}=await import('node:fs');
+ const app=readFileSync(new URL('../app.js',import.meta.url),'utf8');
+ const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
+ assert.match(app,/BillNestCloud\?\.onSave\?\.\(\)/);
+ assert.match(app,/BillNestCloud\?\.settingsMarkup\?\.\(\)/);
+ assert.match(app,/BillNestCloud\?\.setRestoreHandler\?\.\(payload=>/);
+ assert.match(app,/if\(!payload\|\|payload\.version!==1/);
+ assert.match(html,/cloud-backup\.js\?v=23/);
+ assert.ok(html.indexOf('cloud-backup.js?v=23') < html.indexOf('app.bundle.js?v=23'));
+});
