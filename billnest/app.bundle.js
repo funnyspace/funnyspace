@@ -277,12 +277,30 @@ function tryScanline(binary){
   }
   return '';
 }
+/**
+ * Source rectangle visible inside a video element with object-fit: cover.
+ * Keeps the frame used for offline recognition aligned with the mobile preview.
+ */
+function coverCameraRect(sourceWidth,sourceHeight,viewWidth,viewHeight){
+  const sw=Number(sourceWidth),sh=Number(sourceHeight);
+  if(!(sw>0&&sh>0))return {sx:0,sy:0,sw:0,sh:0};
+  const vw=Number(viewWidth),vh=Number(viewHeight);
+  if(!(vw>0&&vh>0))return {sx:0,sy:0,sw,sh};
+  const sourceRatio=sw/sh,viewRatio=vw/vh;
+  if(sourceRatio>viewRatio){
+    const cropWidth=sh*viewRatio;
+    return {sx:(sw-cropWidth)/2,sy:0,sw:cropWidth,sh};
+  }
+  const cropHeight=sw/viewRatio;
+  return {sx:0,sy:(sh-cropHeight)/2,sw,sh:cropHeight};
+}
+
 /** Decode barcodes in an ImageData from a canvas; no network, DOM or dependencies. */
 function decodeRetailImageData(frame){
   if(!frame?.data||!frame.width||!frame.height)return '';
   const {data,width,height}=frame;
   if(width<190||height<20)return '';
-  const positions=[.49,.36,.61,.25,.74,.43,.55];
+  const positions=[.49,.36,.61,.25,.74,.43,.55,.12,.88,.19,.81];
   for(const fraction of positions){
     const row=Math.max(1,Math.min(height-2,Math.round(height*fraction)));
     const light=new Uint8Array(width),hist=new Uint32Array(256);
@@ -309,6 +327,7 @@ function decodeRetailImageData(frame){
   }
   return '';
 }
+
 /** Estimate the 75th percentile luminance of camera pixels (0..255).
  * Bright barcode labels contain dark stripes; using the upper percentile
  * avoids misclassifying their dark bars as poor ambient lighting.
@@ -749,13 +768,19 @@ function startLocalRetailReader(session){
    const video=$('#scannerVideo');
    if(video?.readyState>=2&&video.videoWidth>=320&&video.videoHeight>=120){
     const canvas=scanner.localCanvas||(scanner.localCanvas=document.createElement('canvas'));
-    const w=Math.min(video.videoWidth,1280),h=Math.max(80,Math.min(190,Math.round(w*.15)));
+    // Scan the whole visible video region, not a 44%-high horizontal strip.
+    // Match the mobile CSS object-fit:cover crop to what the user sees.
+    const preview=$('.scanner-preview');
+    const viewW=preview?.clientWidth||video.clientWidth||video.videoWidth;
+    const viewH=preview?.clientHeight||video.clientHeight||video.videoHeight;
+    const rect=coverCameraRect(video.videoWidth,video.videoHeight,viewW,viewH);
+    const w=Math.min(1280,Math.max(320,Math.round(rect.sw)));
+    const h=Math.min(580,Math.max(80,Math.round(w*rect.sh/rect.sw)));
     if(canvas.width!==w)canvas.width=w;
     if(canvas.height!==h)canvas.height=h;
     const ctx=canvas.getContext?.('2d',{willReadFrequently:true});
     if(ctx){
-     const sh=Math.max(80,Math.round(video.videoHeight*.44)),sy=Math.max(0,Math.round((video.videoHeight-sh)/2));
-     ctx.drawImage(video,0,sy,video.videoWidth,Math.min(sh,video.videoHeight),0,0,w,h);
+     ctx.drawImage(video,rect.sx,rect.sy,rect.sw,rect.sh,0,0,w,h);
      const frame=ctx.getImageData(0,0,w,h);
      autoAdjustScannerLight(frame,session);
      const code=decodeRetailImageData(frame);
@@ -770,6 +795,7 @@ function startLocalRetailReader(session){
  };
  loop();
 }
+
 async function startScannerCamera(){
  if(!scanner.open)return;
  releaseScannerCamera();
