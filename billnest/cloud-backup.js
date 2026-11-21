@@ -14,18 +14,40 @@
   const persist = (key, value) => {try { if(value === null) localStorage.removeItem(key); else localStorage.setItem(key, JSON.stringify(value)); return true; } catch { return false; }};
   const escapeHtml = x => String(x ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const validEmail = value => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value || '') && String(value).length <= 200;
+  // E.164 is required by Supabase for phone authentication. For Indian shops, also
+  // accept a plain ten-digit domestic number as a convenient +91 shorthand.
+  function normalizeOtpContact(channel,value){
+    const raw=String(value||'').trim();
+    if(channel==='email'){
+      const email=raw.toLowerCase();
+      if(!validEmail(email))throw Error('Please enter a valid email address.');
+      return email;
+    }
+    if(channel!=='phone')throw Error('Choose email or mobile number.');
+    let phone=raw.replace(/[\s().-]/g,'');
+    if(/^\d{10}$/.test(phone))phone='+91'+phone;
+    if(/^91\d{10}$/.test(phone))phone='+'+phone;
+    if(!/^\+[1-9]\d{7,14}$/.test(phone))throw Error('Enter a valid mobile number, such as 9876543210 or +919876543210.');
+    return phone;
+  }
   const uuid = () => typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : 'bn-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
   let deviceId = localStorage.getItem(DEVICE_KEY);
   if (!deviceId || !/^[\w-]{12,64}$/.test(deviceId)) {deviceId = uuid();try{localStorage.setItem(DEVICE_KEY,deviceId)}catch{}}
   // Public project identifiers may be deployed by the site owner. Never embed service_role keys.
   const deployedConfig = globalThis.BILLNEST_AUTH_CONFIG || {};
   let config = read(CONFIG_KEY) || null;
+  const originalConfig = config;
   if (deployedConfig.url && deployedConfig.key) {
     try {
       config = {url:assertConfig(deployedConfig.url,deployedConfig.key),key:deployedConfig.key,deviceName:config?.deviceName||'My browser'};
     } catch (err) {console.error('Invalid BillNest public auth configuration',err);config=null}
   }
   let session = read(SESSION_KEY) || null;
+  // An auth token from another project must never be reused against a new project.
+  if(session && (!config || (originalConfig && (originalConfig.url!==config.url || originalConfig.key!==config.key)))){
+    session=null;
+    persist(SESSION_KEY,null);
+  }
   let workspaceReader = null;
   let restoreHandler = null;
   let list = [];
@@ -41,7 +63,7 @@
   let otpTarget = '';
   let otpChannel = '';
   const workspaceKey = () => session?.user?.id ? 'billnest-workspace-v1-user-'+session.user.id : 'billnest-workspace-v1';
-  const accountInfo = () => session?.user ? {id:session.user.id,email:session.user.email||'',phone:session.user.phone||''} : null;
+  const accountInfo = () => config && session?.access_token && session?.user?.id ? {id:session.user.id,email:session.user.email||'',phone:session.user.phone||''} : null;
   let refreshing = null;
   let lastSync = '';
   let authGeneration = 0;
@@ -90,7 +112,18 @@
     const response=await fetch(config.url+path,{method,headers,...(body===undefined?{}:{body:JSON.stringify(body)}),cache:'no-store'});
     const raw=await response.text();
     let json;try{json=raw?JSON.parse(raw):null}catch{json=null}
-    if(!response.ok){const detail=String(json?.message || json?.msg || json?.error_description || json?.error || 'HTTP '+response.status).slice(0,180);throw Error(detail)}
+    if(!response.ok){
+      const rawDetail=String(json?.message || json?.msg || json?.error_description || json?.error || 'HTTP '+response.status).slice(0,180);
+      const lower=rawDetail.toLowerCase();
+      const code=String(json?.error_code||json?.code||'').toLowerCase();
+      let detail=rawDetail;
+      if(response.status===429)detail='Too many attempts. Please wait before requesting another code.';
+      else if(code.includes('sms')||lower.includes('sms provider')||lower.includes('sms_send'))detail='SMS delivery is not configured or failed. The site owner must enable the Phone provider and an SMS service in Supabase.';
+      else if(lower.includes('email provider')||code.includes('email_provider'))detail='Email sign-in is disabled. The site owner must enable Email authentication in Supabase.';
+      else if(lower.includes('expired')||lower.includes('invalid otp')||lower.includes('token has expired'))detail='The verification code is incorrect or expired. Request a new code and try again.';
+      else if(!online())detail='You are offline. Connect to the internet and try again.';
+      const error=new Error(detail);error.status=response.status;error.code=code;throw error;
+    }
     return json;
   }
   async function accessToken() {
@@ -177,19 +210,19 @@
     setMessage('Connection saved. Sign in by email to enable automatic backup.','local');
     if(ready())schedule(250);
   }
-  async function sendOtp(channel, identifier) {
-    if(!config)throw Error('Sign-in is not configured yet. The app owner must connect Supabase first.');
-    if(!['email','phone'].includes(channel))throw Error('Choose email or mobile number.');
-    const target=String(identifier||'').trim();
-    if(channel==='email'&&!validEmail(target))throw Error('Enter a valid email address.');
-    if(channel==='phone'&&!/^\+[1-9]\d{7,14}$/.test(target))throw Error('Enter your mobile number with country code, such as +919876543210.');
-    await request('/auth/v1/otp',{method:'POST',body:channel==='email'?{email:target,create_user:true}:{phone:target,create_user:true}});
+  async function sendOtp(channel, identifier, mode='signup') {
+    if(!config)throw Error('Account creation is not enabled yet. The site owner must configure Supabase authentication.');
+    if(!['signup','signin'].includes(mode))throw Error('Choose Create account or Sign in.');
+    const target=normalizeOtpContact(channel,identifier);
+    await request('/auth/v1/otp',{method:'POST',body:channel==='email'
+      ? {email:target,create_user:mode==='signup'}
+      : {phone:target,create_user:mode==='signup',channel:'sms'}});
     otpChannel=channel;otpTarget=target;
-    setMessage(channel==='email'?'Check your email for the sign-in code.':'Check your mobile for the SMS code.','local');
-    return true;
+    setMessage(channel==='email'?'Check your email for the one-time verification code.':'Check your mobile SMS for the one-time verification code.','local');
+    return {contact:target,channel,mode};
   }
   async function verifyOtp(channel, identifier, code) {
-    const target=String(identifier||'').trim(),token=String(code||'').trim();
+    const target=normalizeOtpContact(channel,identifier),token=String(code||'').replace(/\s+/g,'');
     if(!['email','phone'].includes(channel))throw Error('Select a sign-in method.');
     if(!/^\d{6,8}$/.test(token))throw Error('Enter the 6 to 8 digit verification code.');
     const result=await request('/auth/v1/verify',{method:'POST',body:channel==='email'?{email:target,token,type:'email'}:{phone:target,token,type:'sms'}});
@@ -256,6 +289,7 @@
     workspaceKey,
     sendOtp,
     verifyOtp,
-    signOut
+    signOut,
+    normalizeOtpContact
   };
 })();
