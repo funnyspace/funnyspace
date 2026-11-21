@@ -17,7 +17,7 @@
  const account=()=>cloud.currentAccount();
  function updateButton(){
   const signed=Boolean(account());
-  btn.innerHTML='<span class="billnest-account-icon" aria-hidden="true">♙</span><span class="billnest-account-text">'+(signed?'My Account':'Sign in')+'</span>';
+  btn.innerHTML='<span class="billnest-account-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></span><span class="billnest-account-text">'+(signed?'My Account':'Sign in')+'</span>';
   btn.setAttribute('aria-label',signed?'Open BillNest account':'Sign in or sign up to BillNest');
  }
  function importAvailable(){
