@@ -6,7 +6,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const logic = readFileSync(resolve(root, 'logic.mjs'), 'utf8');
 const accounting = readFileSync(resolve(root, 'accounting.mjs'), 'utf8');
 const app = readFileSync(resolve(root, 'app.js'), 'utf8');
-const sourceImport = "import {toPaise,rupees,money,today,calculateInvoice,summarizeProfit,escapeHtml as e,csvEncode} from './logic.mjs';";
+const sourceImport = "import {toPaise,rupees,money,today,calculateInvoice,summarizeProfit,expiryStatus,escapeHtml as e,csvEncode} from './logic.mjs';";
 const accountingImport = "import {invoiceOutstanding,makeAccountingSummary,ACCOUNT_TYPES} from './accounting.mjs';";
 const accountingLogicImport = "import {summarizeProfit} from './logic.mjs';";
 if (!app.includes(accountingImport) || !accounting.startsWith('/**')) throw new Error('Accounting module is missing.');
