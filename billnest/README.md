@@ -20,7 +20,8 @@ The editable source is split between `app.js` (screens and events) `logic.mjs` (
 ## Features
 
 - Overview dashboard with sales, stock value and low-stock alerts.
-- Add or edit products, manage quantity and record stock adjustments.
+- Add or edit products with optional expiry dates, manage quantity and record stock adjustments.
+- View **30-day expiry alerts** and **expired stock** on Dashboard and Inventory, with search/filter and CSV export.
 - Simple point-of-sale cart with stock validation and percent discounts.
 - GST-inclusive or GST-exclusive product pricing, calculating CGST/SGST for same-state supplies and IGST for interstate supplies when both states are configured.
 - Customers, payment methods, fully/partially paid invoices, printing and browser **Save as PDF**.
@@ -138,3 +139,11 @@ Open **Accounting** from the sidebar or the **Accounts** tab at the bottom of th
 **Scope and caveats:** This is a practical cashbook and management P/L, *not* a double-entry accounting system or audited balance sheet. The opening balance is an initial amount before the activity recorded in this workspace, not a dated bank reconciliation. Supplier payables, GST input-credit, purchase tax allocation, returns/refunds, asset depreciation, loan balances, bank statement reconciliation, and statutory accounting are not implemented. Inventory purchase payments do not automatically increase product quantity; update stock in **Inventory** as a separate operation. Browser local storage is not multi-device synchronized, so back up regularly.
 
 Run `node --test tests/*.test.mjs` to test both billing and accounting calculations.
+
+## Expiry dates and mobile shortcuts
+
+- **Inventory → Add product / Edit product → Expiry date** stores an optional date (`YYYY-MM-DD`) per product. Older data without an expiry date remains compatible.
+- From **30 calendar days before expiration**, stocked products receive an **Expiring** warning. The dashboard **Stock & expiry alerts** panel lists urgent products; Inventory includes **Expiring ≤30 days** and **Expired** filters.
+- Expired items are visibly marked in red. This is an **in-app alert when you open or use BillNest**, not an OS push notification, email, or background reminder.
+- **Important:** A product currently has only one expiry date, not individual batch/lot expiry tracking. If multiple batches of the same product have different expiry dates, use separate SKUs for now. The scanner and checkout otherwise work as before.
+- On phones, Billing, Add product, and Accounting are three equal-width shortcuts on the same row. Raised vector icons render without downloading icon files.
