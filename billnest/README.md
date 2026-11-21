@@ -173,3 +173,13 @@ On mobile phones, the live camera fills the full preview rather than appearing i
 5. The QR encoder is vendored locally from QRCode.js (davidshimjs, MIT license). See vendor-LICENSE-qrcodejs.txt. This is not a payment gateway or automatic bank-verification integration.
 
 Previous invoices and backups remain compatible. Previously paid UPI invoices remain paid.
+
+## Cloud backup when online (Version 23)
+
+BillNest now includes an optional automatic cloud backup panel in **Settings > Cloud backup**. Changes are saved in the browser first, then uploaded to the signed-in Supabase project while online. Offline changes are queued for the next connection. There is no automatic cross-device data merge.
+
+**One-time setup is required.** Create a Supabase project, run `supabase-schema.sql` in its SQL Editor, enable email OTP (email template `{{ .Token }}`), and enter your project URL plus **public publishable/anon** key in BillNest. Sign in by emailed code. Never use a service_role/secret key.
+
+Cloud backups are private per signed-in user through RLS, with one latest snapshot per device. The Cloud backup panel lists available devices and offers explicit **Restore** with confirmation. Save a JSON backup before restoring another device's data. The implementation is limited to about 8 MB per workspace. The website remains hosted by GitHub Pages, while the actual database is supplied by **your** Supabase project.
+
+See [CLOUD_SETUP.md](CLOUD_SETUP.md) for complete instructions, security considerations, and limitations.
