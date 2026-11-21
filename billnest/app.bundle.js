@@ -23,7 +23,9 @@ function calculateInvoice(items, productMap, discountPercent = 0, settings = {},
     const taxable = inclusive ? Math.round(discounted * 100 / (100 + rate)) : discounted;
     const tax = inclusive ? discounted - taxable : Math.round(taxable * rate / 100);
     const total = inclusive ? discounted : taxable + tax;
-    lines.push({productId:product.id,sku:product.sku,name:product.name,unit:product.unit || 'pcs',qty,unitPrice:unit,gst:rate,original,discount:original-discounted,taxable,tax,total});
+    // Snapshot purchase cost so later price/cost edits do not rewrite past profits.
+    const unitCost = toPaise(Math.max(0,safeNum(product.cost)));
+    lines.push({productId:product.id,sku:product.sku,name:product.name,unit:product.unit || 'pcs',qty,unitPrice:unit,unitCost,costTotal:unitCost*qty,gst:rate,original,discount:original-discounted,taxable,tax,total});
   }
   const totals = lines.reduce((a,l) => ({list:a.list+l.original,discount:a.discount+l.discount,taxable:a.taxable+l.taxable,tax:a.tax+l.tax,total:a.total+l.total}), {list:0,discount:0,taxable:0,tax:0,total:0});
   const source = (settings.state || '').toLowerCase().trim();
@@ -43,6 +45,49 @@ function csvEncode(rows) {
     const safe = /^[\s]*[=+@\-\t\r]/.test(text) ? "'" + text : text;
     return '"' + safe.replaceAll('"','""') + '"';
   }).join(',')).join('\r\n');
+}
+
+/** Gross P/L from invoiced sales, excluding GST and operating expenses. Amounts in paise.
+ * For invoices created before cost snapshots, use the current product cost only as
+ * an estimate. An archived product with no cost is marked incomplete instead of
+ * silently treating its cost as zero. Never modify stored invoices while reading.
+ */
+function summarizeProfit(invoices,products=[],start='0001-01-01') {
+  const catalog = Array.isArray(products)?products:Object.values(products||{});
+  const productMap = new Map(catalog.map(p=>[String(p.id),p]));
+  const rows = new Map();
+  for (const p of catalog) rows.set(String(p.id),{
+    productId:String(p.id),name:String(p.name||'Unnamed product'),sku:String(p.sku||''),qty:0,
+    sales:0,recognizedSales:0,cost:0,profit:0,estimatedLines:0,missingCostLines:0
+  });
+  let sales=0,recognizedSales=0,cost=0,estimatedLines=0,missingCostLines=0,units=0;
+  for (const inv of invoices||[]) {
+    if (!inv || String(inv.date||'')<start || !Array.isArray(inv.lines)) continue;
+    for (const line of inv.lines) {
+      const qty=Number(line.qty);
+      if (!Number.isFinite(qty)||qty<=0)continue;
+      const id=String(line.productId||line.sku||line.name||'unknown');
+      const product=productMap.get(String(line.productId));
+      const row=rows.get(id)||{productId:id,name:String(line.name||'Unknown product'),sku:String(line.sku||''),qty:0,sales:0,recognizedSales:0,cost:0,profit:0,estimatedLines:0,missingCostLines:0};
+      if (!rows.has(id))rows.set(id,row);
+      const taxable=Number.isFinite(Number(line.taxable))?Math.round(Number(line.taxable)):0;
+      row.qty+=qty;row.sales+=taxable;sales+=taxable;units+=qty;
+      let lineCost;
+      const validCost = v => typeof v==='number' && Number.isSafeInteger(v) && v>=0;
+      if (validCost(line.costTotal))lineCost=line.costTotal;
+      else if (validCost(line.unitCost))lineCost=Math.round(line.unitCost*qty);
+      else if (product && Number.isFinite(Number(product.cost)) && Number(product.cost)>=0) {
+        lineCost=toPaise(product.cost)*qty;
+        row.estimatedLines++;estimatedLines++;
+      } else {
+        row.missingCostLines++;missingCostLines++;continue;
+      }
+      row.recognizedSales+=taxable;row.cost+=lineCost;row.profit+=taxable-lineCost;
+      recognizedSales+=taxable;cost+=lineCost;
+    }
+  }
+  const productRows=Array.from(rows.values()).sort((a,b)=>b.sales-a.sales || a.name.localeCompare(b.name));
+  return {sales,recognizedSales,cost,profit:recognizedSales-cost,margin:recognizedSales?((recognizedSales-cost)/recognizedSales*100):null,units,estimatedLines,missingCostLines,productRows};
 }
 
 const e = escapeHtml;
@@ -75,7 +120,7 @@ function sampleDb(){
 function readDb(){try{const raw=localStorage.getItem(STORE_KEY);if(!raw)return sampleDb();const data=JSON.parse(raw);if(!data || data.version!==1 || !Array.isArray(data.products)||!Array.isArray(data.invoices)||!Array.isArray(data.customers))throw Error('Unsupported data');return {...emptyDb(),...data,settings:{...emptyDb().settings,...data.settings}};}catch(err){console.warn('Could not read existing workspace:',err);return emptyDb()}}
 let db=readDb();
 const pageFromHash = () => {const page=(globalThis.location?.hash||'').replace(/^#\/?/,'').split('/')[0].toLowerCase();return PAGES.some(p=>p[0]===page)?page:'dashboard'};
-let ui={page:pageFromHash(),search:'',filter:'all',salesSearch:'',customerSearch:'',reportRange:'30',modal:null,editId:null,cart:[],billingSearch:'',billingCustomer:'',discount:0,payment:'Cash',billNotes:'',invoiceId:null,scanCode:'',addAfterScan:false};
+let ui={page:pageFromHash(),search:'',filter:'all',salesSearch:'',customerSearch:'',reportRange:'30',profitRange:'30',profitSearch:'',modal:null,editId:null,cart:[],billingSearch:'',billingCustomer:'',discount:0,payment:'Cash',billNotes:'',invoiceId:null,scanCode:'',addAfterScan:false};
 let toastTimer;
 const productsMap = () => Object.fromEntries(db.products.map(p=>[p.id,p]));
 const cleanBarcode = code => String(code??'').trim().slice(0,80);
@@ -483,6 +528,38 @@ function render(){
 }
 function navigate(page,updateHash=true){if(page!=='settings')pendingLogo=null;if(!PAGES.some(p=>p[0]===page))return;if(scanner.open)stopScanner();ui.page=page;ui.modal=null;ui.search='';ui.filter='all';ui.billingSearch='';render();$('.sidebar').classList.remove('open');$('#backdrop')?.classList.remove('show');if(updateHash&&globalThis.location&&location.hash!=='#'+page)location.hash=page;window.scrollTo?.({top:0,behavior:'instant'});}
 window.addEventListener('hashchange',()=>{const page=pageFromHash();if(page!==ui.page)navigate(page,false)});
+// The dashboard reports gross profit on invoiced goods, not business net income.
+function renderProfitDashboard(){
+ const from=ui.profitRange==='all'?'0001-01-01':shiftDay(today(),-Number(ui.profitRange)+1);
+ const stat=summarizeProfit(db.invoices,db.products,from);
+ const dateLabel=ui.profitRange==='all'?'All-time':`Last ${ui.profitRange} days`;
+ const fmtProfit=value=>`${value<0?'− ':''}${money(Math.abs(value))}`;
+ const tone=value=>value<0?'loss':value>0?'gain':'neutral';
+ const query=ui.profitSearch.toLowerCase().trim();
+ const visible=stat.productRows.filter(p=>!query||[p.name,p.sku].some(v=>v.toLowerCase().includes(query)));
+ const number=(v)=>Math.round(v).toLocaleString('en-IN');
+ const cards=[
+  ['Net sales (excl. GST)',money(stat.sales),'After invoice discounts','neutral'],
+  ['Cost of goods sold',money(stat.cost),'Cost of sold products','neutral'],
+  ['Gross profit / loss',fmtProfit(stat.profit),stat.missingCostLines?'Partial: some costs unknown':`${dateLabel} · invoiced sales`,tone(stat.profit)],
+  ['Gross margin',stat.margin===null?'—':`${stat.margin.toFixed(1)}%`,'On sales with known costs',tone(stat.profit)]
+ ];
+ const disclaimer=stat.estimatedLines?`<div class="profit-info">ⓘ ${number(stat.estimatedLines)} older invoice item(s) use current purchase costs. Figures for those sales are <b>estimated</b>.</div>`:'';
+ const missing=stat.missingCostLines?`<div class="profit-info profit-warning">⚠ ${number(stat.missingCostLines)} invoice item(s) lack purchase cost. Their sales are shown, but are excluded from gross profit.</div>`:'';
+ const rowStatus=p=>p.qty===0?'<span class="profit-label neutral">No sales</span>':p.missingCostLines?`<span class="profit-label warning">${p.recognizedSales?'Partial':'Cost missing'}</span>`:p.profit<0?'<span class="profit-label loss">Loss</span>':p.profit>0?'<span class="profit-label gain">Profit</span>':'<span class="profit-label neutral">Break-even</span>';
+ const rowProfit=p=>p.qty===0||!p.recognizedSales&&p.missingCostLines?'—':`<strong class="profit-${tone(p.profit)}">${fmtProfit(p.profit)}</strong>`;
+ return `<section class="card profit-panel" aria-labelledby="profitTitle">
+  <div class="profit-panel-heading"><div><h3 id="profitTitle">Profit &amp; loss</h3><p>Gross profit from invoices, by product. GST is excluded.</p></div>
+    <label class="profit-period-label" for="profitRange">Period<select class="select-input" id="profitRange" aria-label="Profit date range">${[['7','Last 7 days'],['30','Last 30 days'],['90','Last 90 days'],['all','All time']].map(([key,label])=>`<option value="${key}" ${ui.profitRange===key?'selected':''}>${label}</option>`).join('')}</select></label>
+  </div>
+  <div class="profit-summary-grid">${cards.map(([label,value,hint,className])=>`<div class="profit-summary-card"><span>${label}</span><strong class="profit-${className}">${value}</strong><small>${hint}</small></div>`).join('')}</div>
+  ${disclaimer}${missing}
+  <div class="profit-products-head"><div><h4>Product-wise profit / loss</h4><p>Search a product to see units sold, net sales, cost and profit.</p></div><label class="profit-search"><span class="sr-only">Search product profit</span><input type="search" data-search="profit" placeholder="Search product or SKU" value="${e(ui.profitSearch)}" aria-label="Search product profit"></label></div>
+  ${visible.length?`<div class="profit-table-scroll"><table class="profit-table"><thead><tr><th>Product</th><th>Units sold</th><th>Net sales</th><th>Cost</th><th>Gross P/L</th><th>Margin</th><th>Status</th></tr></thead><tbody>${visible.map(p=>`<tr><td><strong>${e(p.name)}</strong><small>${e(p.sku||'')}</small></td><td>${number(p.qty)}</td><td>${p.qty?money(p.sales):'—'}</td><td>${p.qty?money(p.cost):'—'}</td><td>${rowProfit(p)}</td><td>${p.qty && p.recognizedSales?`${(p.profit/p.recognizedSales*100).toFixed(1)}%`:'—'}</td><td>${rowStatus(p)}</td></tr>`).join('')}</tbody></table></div>
+  <div class="profit-mobile-list">${visible.map(p=>`<article class="profit-mobile-item"><div><strong>${e(p.name)}</strong><span>${e(p.sku||'')} · ${number(p.qty)} sold</span></div><div class="profit-mobile-money">${rowProfit(p)}${rowStatus(p)}</div><small>Sales ${money(p.sales)} · Cost ${money(p.cost)}</small></article>`).join('')}</div>`:empty('▥','No matching products',db.products.length?'Try another product name or SKU.':'Add products and issue invoices to see gross profit.')}
+  <p class="profit-footnote">Gross profit = invoiced sales excluding GST and after discounts − purchase cost of units sold. This is <b>not net business profit</b>: rent, salaries, shipping, returns and other expenses are not included. Unpaid invoices count as sales. Enter accurate purchase costs in Inventory.</p>
+ </section>`;
+}
 function renderDashboard(){
  const daily=db.invoices.filter(i=>i.date===today()),todayRevenue=daily.reduce((s,i)=>s+i.total,0);
  const low=db.products.filter(p=>p.stock<=p.lowStock),stockValue=db.products.reduce((s,p)=>s+toPaise(p.cost)*p.stock,0);
@@ -492,6 +569,7 @@ function renderDashboard(){
  return `${showDemoBanner()}<div class="page-intro"><div><h2>Good to see you 👋</h2><p>Here is what is happening in your store today, ${formatDate(today())}.</p></div><div class="toolbar-actions"><button class="btn" data-go="inventory">Manage stock</button><button class="btn btn-primary" data-go="billing">+ Open Billing</button></div></div>
  <div class="quick-start" role="group" aria-label="Quick actions"><button class="quick-start-action quick-billing" data-go="billing"><span class="quick-start-icon">▧</span><span><b>Billing</b><small>New invoice and checkout</small></span><span class="quick-start-arrow">→</span></button><button class="quick-start-action" data-action="add-product"><span class="quick-start-icon">＋</span><span><b>Add product</b><small>Update inventory</small></span><span class="quick-start-arrow">→</span></button><button class="quick-start-action" data-go="sales"><span class="quick-start-icon">▤</span><span><b>View invoices</b><small>Sales history</small></span><span class="quick-start-arrow">→</span></button></div>
  <div class="grid metric-grid">${metrics.map(([name,value,subtitle,icon,color])=>`<div class="card metric-card"><div class="metric-top">${name}<span class="metric-icon ${color}">${icon}</span></div><div class="metric-value">${value}</div><div class="metric-sub">${subtitle}</div></div>`).join('')}</div>
+ ${renderProfitDashboard()}
  <div class="section-grid"><section class="card section-card"><div class="section-title"><h3>Sales overview</h3><span class="muted small">Last 7 days</span></div><div class="chart-wrap">${points.map((value,i)=>`<div class="chart-col"><div class="chart-bars"><div class="chart-bar" style="height:${Math.max(2,Math.round(value/max*100))}%" title="${e(days[i])}: ${money(value)}"></div></div><div class="chart-label">${dateFromDay(days[i]).toLocaleDateString('en-IN',{weekday:'short'})}</div></div>`).join('')}</div><p class="mini-note">Daily invoice totals in Indian rupees</p></section>
  <section class="card section-card"><div class="section-title"><h3>Stock alerts</h3><button class="section-link" data-go="inventory">View inventory →</button></div>${low.length?`<div class="alert-list">${low.slice(0,4).map(p=>`<div class="alert-row"><div class="alert-icon">⚠</div><div class="alert-details"><b>${e(p.name)}</b><small>${e(p.sku)} · Reorder at ${p.lowStock}</small></div><span class="chip ${p.stock===0?'red':'yellow'}">${p.stock} left</span></div>`).join('')}</div>${low.length>4?`<p class="mini-note">+${low.length-4} more products need attention</p>`:''}`:empty('✓','All stocked up','No products have reached their low-stock threshold.')}</section></div>
  <section class="card recent-card"><div class="section-title" style="padding:20px 22px 0;margin-bottom:8px"><h3>Recent invoices</h3><button class="section-link" data-go="sales">View all →</button></div>${recent.length?`<div class="table-scroll"><table class="data-table"><thead><tr><th>Invoice</th><th>Customer</th><th>Date</th><th>Payment</th><th>Amount</th><th></th></tr></thead><tbody>${recent.map(x=>`<tr><td><strong>${e(x.number)}</strong></td><td>${e(x.customer?.name||'Walk-in customer')}</td><td>${formatDate(x.date)}</td><td><span class="chip ${x.paid?'green':'yellow'}">${x.paid?'Paid':'Unpaid'}</span></td><td><strong>${money(x.total)}</strong></td><td><button class="btn btn-sm" data-action="view-invoice" data-id="${x.id}">View</button></td></tr>`).join('')}</tbody></table></div>`:empty('▧','No invoices yet','Start by creating your first invoice.','Create invoice','new-bill')}</section>`;
@@ -663,7 +741,7 @@ document.addEventListener('click',event=>{
 document.addEventListener('submit',event=>{if(event.target.matches('#scanManualForm')){event.preventDefault();barcodeFound(new FormData(event.target).get('barcode'),true);return}if(event.target.matches('#productForm,#customerForm,#stockForm,#settingsForm')){event.preventDefault();handleForm(event.target)}});
 document.addEventListener('input',event=>{
  const input=event.target;
- if(input.dataset.search){const key=input.dataset.search;const map={inventory:'search',billing:'billingSearch',sales:'salesSearch',customers:'customerSearch'};ui[map[key]]=input.value;rerenderKeepFocus(`[data-search="${key}"]`);}
+ if(input.dataset.search){const key=input.dataset.search;const map={inventory:'search',billing:'billingSearch',sales:'salesSearch',customers:'customerSearch',profit:'profitSearch'};ui[map[key]]=input.value;rerenderKeepFocus(`[data-search="${key}"]`);}
  if(input.id==='billDiscount'){const n=Number(input.value);ui.discount=Math.max(0,Math.min(100,Number.isFinite(n)?n:0));rerenderKeepFocus('#billDiscount')}
  if(input.id==='billNotes')ui.billNotes=input.value;
  if(input.id==='scannerZoom')applyScannerZoom(input.value);
@@ -674,6 +752,7 @@ document.addEventListener('change',event=>{
  if(t.id==='billCustomer'){ui.billingCustomer=t.value;render()}
  if(t.id==='billPayment'){ui.payment=t.value;render()}
  if(t.id==='reportRange'){ui.reportRange=t.value;render()}
+ if(t.id==='profitRange' && ['7','30','90','all'].includes(t.value)){ui.profitRange=t.value;render()}
  if(t.id==='importFile')importBackup(t.files?.[0]);
  if(t.id==='businessLogoFile')convertBusinessLogo(t.files?.[0]);
  if(t.id==='barcodePhoto')scanBarcodeImage(t.files?.[0]);
