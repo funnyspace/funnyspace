@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 72" role="img" aria-labelledby="title">
+  <title id="title">BillNest receipt B logo</title>
+  <defs><clipPath id="billnest-b"><path d="M10 4H35C49 4 57 12 57 23C57 30 54 35 48 38C56 41 60 47 60 55C60 66 51 71 35 71H33L29 67L25 71L21 67L17 71L13 67L10 70Z"/></clipPath></defs>
+  <g clip-path="url(#billnest-b)">
+    <path fill="#FFFFFF" d="M0 0H64V72H0Z"/>
+    <path fill="#19BF93" d="M0 38H64V72H0Z"/>
+    <path fill="#102E43" d="M25 17H34C43 17 43 29 34 29H25Z"/>
+    <path fill="#102E43" d="M25 46H36C45 46 45 59 36 59H25Z"/>
+    <path stroke="#19BF93" stroke-width="1.5" stroke-linecap="round" d="M28 21H34M28 25H33"/>
+  </g>
+</svg>
