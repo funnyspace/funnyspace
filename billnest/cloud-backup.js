@@ -182,7 +182,7 @@
     if(!['email','phone'].includes(channel))throw Error('Choose email or mobile number.');
     const target=String(identifier||'').trim();
     if(channel==='email'&&!validEmail(target))throw Error('Enter a valid email address.');
-    if(channel==='phone'&&!/^\\+[1-9]\\d{7,14}$/.test(target))throw Error('Enter your mobile number with country code, such as +919876543210.');
+    if(channel==='phone'&&!/^\+[1-9]\d{7,14}$/.test(target))throw Error('Enter your mobile number with country code, such as +919876543210.');
     await request('/auth/v1/otp',{method:'POST',body:channel==='email'?{email:target,create_user:true}:{phone:target,create_user:true}});
     otpChannel=channel;otpTarget=target;
     setMessage(channel==='email'?'Check your email for the sign-in code.':'Check your mobile for the SMS code.','local');
@@ -191,7 +191,7 @@
   async function verifyOtp(channel, identifier, code) {
     const target=String(identifier||'').trim(),token=String(code||'').trim();
     if(!['email','phone'].includes(channel))throw Error('Select a sign-in method.');
-    if(!/^\\d{6,8}$/.test(token))throw Error('Enter the 6 to 8 digit verification code.');
+    if(!/^\d{6,8}$/.test(token))throw Error('Enter the 6 to 8 digit verification code.');
     const result=await request('/auth/v1/verify',{method:'POST',body:channel==='email'?{email:target,token,type:'email'}:{phone:target,token,type:'sms'}});
     if(!result?.access_token||!result?.refresh_token||!result?.user?.id)throw Error('Could not complete sign-in.');
     session={access_token:result.access_token,refresh_token:result.refresh_token,expiresAt:Date.now()+Number(result.expires_in||3600)*1000,user:result.user};
