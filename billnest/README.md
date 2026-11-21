@@ -195,3 +195,5 @@ BillNest is now an installable **Progressive Web App (PWA)**. In Android Chrome,
 **Important:** An Android WebView APK stores browser data separately from Chrome. Before switching to an APK, export a BillNest JSON backup in Settings, then import it within the installed app. Never assume installation automatically migrates records.
 
 See the Android APK source and build instructions under `android/`. A workflow provides downloadable test APK build artifacts when GitHub Actions is enabled. Public distribution and production updates should use an appropriately protected, persistent release signing key.
+
+The built test APK is also hosted at `billnest/download/BillNest-Android-Test.apk` for a direct mobile download. This is a debug-signed preview only, not a production or Play Store release. A matching Download APK (test) link appears beside the PWA Install App option on mobile.
