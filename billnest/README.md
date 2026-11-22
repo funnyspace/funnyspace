@@ -238,10 +238,10 @@ unverified phone number.
 
 ### Data separation
 
-A verified Google login and a verified phone login are separate Supabase
-identities unless explicitly linked through a verified account-linking flow.
-Using the same person’s Gmail and phone number does **not** automatically merge
-their billing data. Each account has its own local browser workspace, and an
+Google and email OTP identities may be automatically linked by Supabase
+when they share a verified email. A Google login and a phone-number login
+must **not** be assumed to belong to the same user: verification of the
+phone does not automatically merge billing data into an email account. Each account has its own local browser workspace, and an
 existing guest workspace can be explicitly copied into an empty account.
 Cloud backups are per signed-in account and require the existing RLS-protected
 backup table. Local browser data is not encrypted, and login alone does not
