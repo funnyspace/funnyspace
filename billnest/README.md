@@ -192,6 +192,61 @@ Dedicated Bluetooth LE printing, 58/80 mm thermal-receipt layouts,
 printer preferences and test receipts have been removed. The removed
 printer options do not affect saved invoices or billing calculations.
 
+## Sign in with your own Google (Gmail) account or phone number
+
+BillNest has a **Continue with Google** button and an SMS OTP login flow.
+The Google button uses the recommended **OAuth authorization-code + PKCE**
+flow through Supabase. A visitor chooses their own Google account on Google's
+sign-in screen and returns to BillNest. Google passwords are never collected
+by BillNest. On mobile, users can enter their own 10-digit Indian mobile
+number (automatically converted to +91) or a full international number and
+verify a real one-time SMS code. Email OTP remains an additional option.
+
+**Important:** Real accounts are not available to visitors until the site owner
+finishes the one-time setup. The public file `billnest/auth-config.js` is still
+blank. GitHub Pages alone cannot issue Google sessions or SMS verification.
+
+### Activate Google sign-in
+
+1. Create a project in the [Supabase Dashboard](https://supabase.com/dashboard).
+   In **Authentication > URL Configuration**, set the Site URL to
+   `https://funnyspace.github.io/funnyspace/billnest/` and add that exact
+   address to the redirect allow list.
+2. Open the [Google Cloud Console](https://console.cloud.google.com/),
+   configure the OAuth consent screen and create an **OAuth client ID** of type
+   **Web application**.
+3. In Google's **Authorized redirect URIs**, add your Supabase callback,
+   normally `https://YOUR-PROJECT.supabase.co/auth/v1/callback`. Copy the
+   callback from **Supabase > Authentication > Providers > Google**.
+   This Google redirect is to Supabase, **not** to GitHub Pages.
+4. In **Supabase > Authentication > Providers > Google**, enable the provider
+   and enter the Google **Client ID and Client Secret**. The Google secret
+   belongs in Supabase settings, **never** in the public GitHub repository.
+5. Edit `billnest/auth-config.js`, setting `url` to the Supabase project
+   HTTPS URL and `key` to its **public publishable or legacy anon key**.
+   Never use a Supabase secret or service_role key in website code.
+6. Deploy and use **Login / Sign up > Continue with Google**, then confirm
+   the correct email account appears in **My Account** after the redirect.
+
+### Activate mobile-number login
+
+Enable **Supabase Authentication > Providers > Phone** and connect an SMS
+delivery service supported by Supabase. For Indian SMS, confirm sender and
+template/DLT requirements with that provider. The Phone login tab sends a
+one-time code to the user's verified number; no account is created based on an
+unverified phone number.
+
+### Data separation
+
+Google and email OTP identities may be automatically linked by Supabase
+when they share a verified email. A Google login and a phone-number login
+must **not** be assumed to belong to the same user: verification of the
+phone does not automatically merge billing data into an email account. Each account has its own local browser workspace, and an
+existing guest workspace can be explicitly copied into an empty account.
+Cloud backups are per signed-in account and require the existing RLS-protected
+backup table. Local browser data is not encrypted, and login alone does not
+provide server-enforced invoice authorization.
+
 ## Account creation troubleshooting (registration fix)
 
 The **Login / Sign up** button now opens separate **Create account** and **Sign in**

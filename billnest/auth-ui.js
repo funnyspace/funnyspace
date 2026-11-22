@@ -15,7 +15,7 @@
  btn.className='billnest-account-btn';
  btn.id='billnestAccountBtn';
  top.prepend(btn);
- let mode='signup',channel='email',contact='',sent=false,busy=false,notice='',noticeError=false,previousFocus=null,resendAfter=0,resendTimer=null;
+ let mode='signin',channel='phone',contact='',sent=false,busy=false,notice='',noticeError=false,previousFocus=null,resendAfter=0,resendTimer=null;
  const account=()=>cloud.currentAccount?.()||null;
  function updateButton(){
   const signed=Boolean(account());
@@ -62,13 +62,16 @@
     (importAvailable()?'<button type="button" class="billnest-auth-primary" data-auth-import>Copy existing offline store into this account</button><p class="billnest-auth-note">Your original offline store will not be deleted.</p>':'')+
     '<button type="button" class="billnest-auth-logout" data-auth-signout>Sign out</button>';
   }else if(!cloud.hasAuthConfig?.()){
-   content='<section class="billnest-auth-setup" role="alert"><strong>Account registration is not activated</strong>'+
-    '<p class="billnest-auth-note">BillNest needs a Supabase project to create accounts and send email or mobile OTPs. The website owner must enable Email authentication and configure an SMS provider for phone sign-up.</p>'+
+   content='<section class="billnest-auth-setup" role="alert"><strong>Google and mobile login need activation</strong>'+
+    '<p class="billnest-auth-note">To let people sign in with their own Google account or mobile number, the site owner must connect Supabase, enable Google sign-in and configure an SMS provider for phone verification.</p>'+
     '<p class="billnest-auth-note">Until then, you can keep using the offline billing workspace without signing in.</p>'+
+    '<button type="button" class="billnest-auth-google" data-auth-google><span class="billnest-google-g" aria-hidden="true">G</span> Continue with Google</button>'+
     '<button type="button" class="billnest-auth-primary" data-auth-settings>Configure authentication</button>'+
     '<button type="button" class="billnest-auth-secondary" data-auth-close>Continue without account</button></section>';
   }else{
-   content='<div class="billnest-auth-tabs billnest-auth-mode" role="tablist" aria-label="Account action">'+
+   content='<button type="button" class="billnest-auth-google" data-auth-google><span class="billnest-google-g" aria-hidden="true">G</span> Continue with Google</button>'+
+    '<p class="billnest-auth-or">or sign in with a mobile number / email</p>'+
+    '<div class="billnest-auth-tabs billnest-auth-mode" role="tablist" aria-label="Account action">'+
     '<button type="button" role="tab" data-auth-mode="signup" aria-selected="'+(mode==='signup')+'">Create account</button>'+
     '<button type="button" role="tab" data-auth-mode="signin" aria-selected="'+(mode==='signin')+'">Sign in</button></div>'+
     '<div class="billnest-auth-tabs" role="tablist" aria-label="Verification method">'+
@@ -92,7 +95,7 @@
   layer.innerHTML='<div role="dialog" aria-modal="true" aria-labelledby="billnestAuthTitle" class="billnest-auth-panel">'+
    '<button type="button" class="billnest-auth-close" data-auth-close aria-label="Close">×</button>'+
    '<div class="billnest-auth-title"><img src="logo-mark.svg" width="45" height="45" alt=""><h2 id="billnestAuthTitle">'+(user?'My Account':mode==='signup'?'Create your BillNest account':'Login to BillNest')+'</h2></div>'+
-   '<p class="billnest-auth-subtitle">'+(user?'Manage your account and local billing data.':'Secure email or mobile number verification')+'</p>'+
+   '<p class="billnest-auth-subtitle">'+(user?'Manage your account and local billing data.':'Use your Google account or verify your mobile number')+'</p>'+
    content+'</div>';
   messageBox();
  }
@@ -108,6 +111,14 @@
   const target=e.target.closest('button');
   if(!target||busy)return;
   if(target.matches('[data-auth-close]')){close();return}
+  if(target.matches('[data-auth-google]')){
+   busy=true;target.disabled=true;
+   cloud.startGoogleSignIn().catch(err=>{
+    busy=false;target.disabled=false;
+    message(err.message||'Unable to start Google login.',true);
+   });
+   return;
+  }
   if(target.matches('[data-auth-mode]')){
    mode=target.dataset.authMode;resetFlow();render();layer.querySelector('#billnestAuthContact')?.focus();return;
   }
@@ -175,5 +186,13 @@
   else if(!e.shiftKey&&document.activeElement===items[items.length-1]){e.preventDefault();items[0].focus()}
  });
  window.addEventListener('billnest-auth-changed',()=>{updateButton();setTimeout(()=>location.reload(),150)});
+ window.addEventListener('billnest-google-auth-error',()=>{
+  open();
+  message(cloud.getGoogleError?.()||'Google sign-in was not completed.',true);
+  cloud.clearGoogleError?.();
+ });
+ if(cloud.getGoogleError?.()){
+  open();message(cloud.getGoogleError(),true);cloud.clearGoogleError?.();
+ }
  updateButton();
 })();
