@@ -215,7 +215,7 @@
   }
   // Google sign-in uses OAuth authorization code with PKCE, not URL-fragment tokens.
   // The verifier stays in sessionStorage and the code is exchanged with Supabase.
-  const base64url=bytes=>btoa(String.fromCharCode(...bytes)).replace(/\\+/g,'-').replace(/\\//g,'_').replace(/=+$/,'');
+  const base64url=bytes=>btoa(String.fromCharCode(...bytes)).replaceAll('+','-').replaceAll('/','_').replace(/=+$/,'');
   async function startGoogleSignIn(){
     if(!config?.url||!config?.key)throw Error('Google login is not enabled yet. The site owner must configure a Supabase project.');
     if(!online())throw Error('Connect to the internet to sign in with Google.');
