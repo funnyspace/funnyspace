@@ -7,6 +7,7 @@
   'use strict';
   const CONFIG_KEY = 'billnest-cloud-config-v1';
   const SESSION_KEY = 'billnest-cloud-session-v1';
+  const GOOGLE_PKCE_KEY = 'billnest-google-pkce-v1';
   const DEVICE_KEY = 'billnest-cloud-device-v1';
   const MAX_BACKUP_CHARS = 8_000_000;
   const TABLE = 'billnest_cloud_backups';
@@ -43,6 +44,7 @@
     } catch (err) {console.error('Invalid BillNest public auth configuration',err);config=null}
   }
   let session = read(SESSION_KEY) || null;
+  let googleError = '';
   // An auth token from another project must never be reused against a new project.
   if(session && (!config || (originalConfig && (originalConfig.url!==config.url || originalConfig.key!==config.key)))){
     session=null;
@@ -211,6 +213,62 @@
     if(changed)window.dispatchEvent(new Event('billnest-auth-changed'));
     if(ready())schedule(250);
   }
+  // Google sign-in uses OAuth authorization code with PKCE, not URL-fragment tokens.
+  // The verifier stays in sessionStorage and the code is exchanged with Supabase.
+  const base64url=bytes=>btoa(String.fromCharCode(...bytes)).replace(/\\+/g,'-').replace(/\\//g,'_').replace(/=+$/,'');
+  async function startGoogleSignIn(){
+    if(!config?.url||!config?.key)throw Error('Google login is not enabled yet. The site owner must configure a Supabase project.');
+    if(!online())throw Error('Connect to the internet to sign in with Google.');
+    if(!globalThis.crypto?.subtle||!globalThis.crypto?.getRandomValues)throw Error('Google login requires a secure HTTPS browser.');
+    const callback=new URL('./',location.href);
+    if(callback.protocol!=='https:' && callback.hostname!=='localhost')throw Error('Google login requires an HTTPS website.');
+    const random=crypto.getRandomValues(new Uint8Array(32));
+    const verifier=base64url(random);
+    const hash=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(verifier));
+    const challenge=base64url(new Uint8Array(hash));
+    const pending={verifier,createdAt:Date.now(),projectUrl:config.url,returnHash:location.hash||'#dashboard'};
+    try{sessionStorage.setItem(GOOGLE_PKCE_KEY,JSON.stringify(pending))}
+    catch{throw Error('Browser session storage is disabled. Enable site storage for Google login.')}
+    googleError='';
+    const params=new URLSearchParams({provider:'google',redirect_to:callback.origin+callback.pathname,code_challenge:challenge,code_challenge_method:'s256'});
+    location.assign(config.url+'/auth/v1/authorize?'+params);
+    return true;
+  }
+  async function finishGoogleSignIn(){
+    let pending=null;
+    try{pending=JSON.parse(sessionStorage.getItem(GOOGLE_PKCE_KEY)||'null')}catch{}
+    if(!pending)return false;
+    const url=new URL(location.href);
+    const code=url.searchParams.get('code');
+    const error=url.searchParams.get('error')||url.searchParams.get('error_code');
+    if(!code&&!error)return false;
+    try{sessionStorage.removeItem(GOOGLE_PKCE_KEY)}catch{}
+    for(const name of ['code','error','error_code','error_description'])url.searchParams.delete(name);
+    history.replaceState(history.state,'',url.pathname+url.search+(pending.returnHash&&/^#[a-z/-]+$/i.test(pending.returnHash)?pending.returnHash:url.hash));
+    if(error){
+      googleError='Google sign-in was not completed: '+String(url.searchParams.get('error_description')||error).slice(0,160);
+      window.dispatchEvent(new Event('billnest-google-auth-error'));
+      return false;
+    }
+    if(!config||pending.projectUrl!==config.url||!pending.verifier||Date.now()-pending.createdAt>10*60*1000){
+      googleError='The Google sign-in request expired or the authentication project changed. Please try again.';
+      window.dispatchEvent(new Event('billnest-google-auth-error'));
+      return false;
+    }
+    try{
+      const result=await request('/auth/v1/token?grant_type=pkce',{method:'POST',body:{auth_code:code,code_verifier:pending.verifier}});
+      if(!result?.access_token||!result?.refresh_token||!result?.user?.id)throw Error('Google verification did not return a valid session.');
+      session={access_token:result.access_token,refresh_token:result.refresh_token,expiresAt:Date.now()+Number(result.expires_in||3600)*1000,user:result.user};
+      if(!persist(SESSION_KEY,session))throw Error('Unable to save your login session on this device.');
+      authGeneration++;list=[];savedSeq=-1;googleError='';
+      window.dispatchEvent(new Event('billnest-auth-changed'));
+      return true;
+    }catch(err){
+      googleError='Google sign-in failed: '+String(err?.message||err).slice(0,160);
+      window.dispatchEvent(new Event('billnest-google-auth-error'));
+      return false;
+    }
+  }
   async function sendOtp(channel, identifier, mode='signup') {
     if(!config)throw Error('Account creation is not enabled yet. The site owner must configure Supabase authentication.');
     if(!['signup','signin'].includes(mode))throw Error('Choose Create account or Sign in.');
@@ -291,6 +349,12 @@
     sendOtp,
     verifyOtp,
     signOut,
+    startGoogleSignIn,
+    getGoogleError:()=>googleError,
+    clearGoogleError:()=>{googleError=''},
     normalizeOtpContact
   };
+  // The OAuth provider returns here after the user chooses their Google account.
+  // Complete the code exchange without allowing an unverified local account.
+  void finishGoogleSignIn();
 })();
