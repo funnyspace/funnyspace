@@ -30,3 +30,12 @@ body.billnest-auth-open{overflow:hidden}
 .billnest-auth-setup .billnest-auth-secondary{display:block;width:100%;margin-top:7px;text-align:center}
 .billnest-auth-form [readonly]{background:#f5f8f9;color:#425d65}
 @media(max-width:390px){.billnest-auth-tabs{gap:3px;padding:4px}.billnest-auth-tabs button{font-size:12px;padding:5px 7px}.billnest-auth-otp-actions{align-items:stretch;flex-direction:column}}
+
+/* Google Account sign-in and clear alternative mobile login. */
+.billnest-auth-google{display:flex;align-items:center;justify-content:center;gap:12px;width:100%;min-height:48px;padding:10px 16px;border:1px solid #d1dadf;border-radius:11px;background:white;color:#263742;font-weight:750;font-size:14px;box-shadow:0 1px 3px rgba(20,45,55,.04)}
+.billnest-auth-google:hover{background:#f8fbfc;border-color:#b5c7d0}
+.billnest-auth-google:disabled{opacity:.5;cursor:wait}
+.billnest-google-g{font-size:21px;line-height:1;font-family:Arial,Helvetica,sans-serif;font-weight:900;background:linear-gradient(125deg,#4285f4 10%,#34a853 36%,#fbbc05 60%,#ea4335 85%);color:transparent;background-clip:text;-webkit-background-clip:text}
+.billnest-auth-or{text-align:center;margin:14px 0;color:#667c88;font-size:12px}
+.billnest-auth-or::before,.billnest-auth-or::after{content:'';display:inline-block;width:16px;height:1px;background:#d5e1e5;vertical-align:middle;margin:0 7px}
+.billnest-auth-google:focus-visible{outline:3px solid #b9dfd4;outline-offset:2px}
