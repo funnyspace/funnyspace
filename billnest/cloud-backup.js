@@ -241,12 +241,13 @@
     const url=new URL(location.href);
     const code=url.searchParams.get('code');
     const error=url.searchParams.get('error')||url.searchParams.get('error_code');
+    const errorDescription=url.searchParams.get('error_description');
     if(!code&&!error)return false;
     try{sessionStorage.removeItem(GOOGLE_PKCE_KEY)}catch{}
     for(const name of ['code','error','error_code','error_description'])url.searchParams.delete(name);
     history.replaceState(history.state,'',url.pathname+url.search+(pending.returnHash&&/^#[a-z/-]+$/i.test(pending.returnHash)?pending.returnHash:url.hash));
     if(error){
-      googleError='Google sign-in was not completed: '+String(url.searchParams.get('error_description')||error).slice(0,160);
+      googleError='Google sign-in was not completed: '+String(errorDescription||error).slice(0,160);
       window.dispatchEvent(new Event('billnest-google-auth-error'));
       return false;
     }
