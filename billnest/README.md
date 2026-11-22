@@ -28,6 +28,28 @@ The editable source is split between `app.js` (screens and events) `logic.mjs` (
 - Sales history, basic reports, CSV exports, JSON backup and restore.
 - Responsive layout for desktop, tablet and mobile.
 
+## Large catalog performance and production capacity
+
+Inventory, billing product search, invoice history, customers, profit reports,
+customer receivables and the cashbook now show **40 rows per page**. Use the
+Previous / Next controls to browse matching results. Search for a customer's
+name, phone or email in Billing instead of loading every customer into the
+dropdown. Summary totals and exported CSV files still include all records.
+
+These changes reduce browser rendering overhead; they **do not make BillNest
+a 100,000-user service**. The application still stores a complete workspace
+in browser `localStorage` and performs full data serialization when saving.
+Large businesses can exceed browser storage limits. Existing single-device
+backups remain essential.
+
+See [SCALING.md](SCALING.md) for the requirements for 100,000 active users,
+concurrent cashiers, tenant-isolated database storage, transactions, paid
+hosting and evidence-based load testing. Do not use GitHub Pages as a
+commercial SaaS host.
+
+Run `node --test tests/performance.test.mjs` for the pagination
+regression checks.
+
 ## Important limitations
 
 This is a **single-browser prototype**, not production-grade financial software. Records live in your browser's `localStorage`, not in GitHub or a cloud database. Clearing site data or switching devices may erase records. Download regular JSON backups in Settings. Anyone using the same browser profile can access the records. Avoid storing sensitive customer information on a shared device.
