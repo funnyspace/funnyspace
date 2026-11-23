@@ -19,10 +19,10 @@ begin
  if target is null then
   raise exception 'Staff member must register and verify email before being added'; end if;
  if target=actor then raise exception 'Owner role cannot be modified'; end if;
- insert into public.bn_shop_members(shop_id,user_id,role)
+ insert into public.bn_shop_members as member(shop_id,user_id,role)
  values(p_shop_id,target,p_role)
  on conflict (shop_id,user_id) do update set
- role=case when public.bn_shop_members.role='owner' then public.bn_shop_members.role else excluded.role end;
+ role=case when member.role='owner' then member.role else excluded.role end;
  return target;
 end $$;
 revoke all on function public.bn_add_existing_member(uuid,text,text) from public, anon;
