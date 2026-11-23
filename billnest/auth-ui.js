@@ -16,6 +16,7 @@
  btn.id='billnestAccountBtn';
  top.prepend(btn);
  let mode='signin',channel='phone',contact='',sent=false,busy=false,notice='',noticeError=false,previousFocus=null,resendAfter=0,resendTimer=null;
+ let otpChallenge;
  const account=()=>cloud.currentAccount?.()||null;
  function updateButton(){
   const signed=Boolean(account());
@@ -101,6 +102,7 @@
  }
  function open(){previousFocus=document.activeElement;layer.hidden=false;document.body.classList.add('billnest-auth-open');render();layer.querySelector('[data-auth-close]')?.focus()}
  function close(){
+  otpChallenge?.abort();
   layer.hidden=true;layer.innerHTML='';document.body.classList.remove('billnest-auth-open');
   if(resendTimer){clearTimeout(resendTimer);resendTimer=null}
   previousFocus?.focus?.();
@@ -109,8 +111,9 @@
  layer.addEventListener('click',e=>{
   if(e.target===layer){close();return}
   const target=e.target.closest('button');
-  if(!target||busy)return;
+  if(!target)return;
   if(target.matches('[data-auth-close]')){close();return}
+  if(busy)return;
   if(target.matches('[data-auth-google]')){
    busy=true;target.disabled=true;
    cloud.startGoogleSignIn().catch(err=>{
@@ -144,11 +147,16 @@
   if(target.matches('[data-auth-resend]')){
    if(Date.now()<resendAfter)return;
    busy=true;target.disabled=true;
-   cloud.sendOtp(channel,contact,mode).then(result=>{
+   const challenge=new AbortController();
+   otpChallenge=challenge;
+   cloud.sendOtp(channel,contact,mode,target.closest('form'),challenge.signal).then(result=>{
     contact=result.contact;resendAfter=Date.now()+60000;
+    if(challenge.signal.aborted)return;
     message('Another verification code was requested. Check your '+(channel==='email'?'email inbox':'SMS')+'.');
     scheduleResend();
-   }).catch(err=>message(err.message||'Unable to resend the code.',true)).finally(()=>{busy=false;const b=layer.querySelector('[data-auth-resend]');if(b&&!resendTimer)b.disabled=false});
+   }).catch(err=>{
+    if(!challenge.signal.aborted)message(err.message||'Unable to resend the code.',true);
+   }).finally(()=>{otpChallenge=null;busy=false;const b=layer.querySelector('[data-auth-resend]');if(b&&!resendTimer)b.disabled=false});
   }
  });
  layer.addEventListener('submit',async e=>{
@@ -162,8 +170,10 @@
   try{
    if(form.id==='billnestAuthSend'){
     const raw=String(new FormData(form).get('contact')||'').trim();
-    const result=await cloud.sendOtp(channel,raw,mode);
+    otpChallenge=new AbortController();
+    const result=await cloud.sendOtp(channel,raw,mode,form,otpChallenge.signal);
     contact=result.contact;sent=true;resendAfter=Date.now()+60000;
+    if(otpChallenge.signal.aborted)return;
     render();
     message('Verification code requested. Check your '+(channel==='email'?'email inbox (also spam)':'mobile SMS')+'.');
     scheduleResend();
@@ -173,14 +183,14 @@
     await cloud.verifyOtp(channel,contact,code);
     close();
    }
-  }catch(err){message(err.message||'Account request failed. Try again.',true)}
-  finally{busy=false;const active=layer.querySelector('[type=submit]');if(active)active.disabled=false}
+  }catch(err){if(!otpChallenge?.signal.aborted)message(err.message||'Account request failed. Try again.',true)}
+  finally{otpChallenge=null;busy=false;const active=layer.querySelector('[type=submit]');if(active)active.disabled=false}
  });
  document.addEventListener('keydown',e=>{
   if(layer.hidden)return;
   if(e.key==='Escape'){e.preventDefault();close();return}
   if(e.key!=='Tab')return;
-  const items=[...layer.querySelectorAll('button:not(:disabled),input:not(:disabled)')];
+  const items=[...layer.querySelectorAll('button:not(:disabled),input:not(:disabled),iframe')];
   if(!items.length)return;
   if(e.shiftKey&&document.activeElement===items[0]){e.preventDefault();items[items.length-1].focus()}
   else if(!e.shiftKey&&document.activeElement===items[items.length-1]){e.preventDefault();items[0].focus()}

@@ -1,5 +1,5 @@
 /**
- * BillNest optional cloud backup for its static GitHub Pages site.
+ * BillNest optional cloud backup for the static site.
  * Local-first: save locally, then upload one latest snapshot per signed-in device.
  * Cloud restore is always explicit. Never share a service_role / secret key here.
  */
@@ -270,13 +270,23 @@
       return false;
     }
   }
-  async function sendOtp(channel, identifier, mode='signup') {
+  async function sendOtp(channel, identifier, mode='signup', challengeHost, signal) {
     if(!config)throw Error('Account creation is not enabled yet. The site owner must configure Supabase authentication.');
     if(!['signup','signin'].includes(mode))throw Error('Choose Create account or Sign in.');
+    signal?.throwIfAborted();
     const target=normalizeOtpContact(channel,identifier);
-    await request('/auth/v1/otp',{method:'POST',body:channel==='email'
+    const body=channel==='email'
       ? {email:target,create_user:mode==='signup'}
-      : {phone:target,create_user:mode==='signup',channel:'sms'}});
+      : {phone:target,create_user:mode==='signup',channel:'sms'};
+    const siteKey=deployedConfig.turnstileSiteKey;
+    if(siteKey && config.url===String(deployedConfig.url||'').trim().replace(/\/$/,'')){
+      if(!online())throw Error('Connect to the internet to request a sign-in code.');
+      if(!globalThis.BillNestTurnstile)throw Error('Bot verification could not load. Reload BillNest and try again.');
+      const token=await globalThis.BillNestTurnstile(siteKey,challengeHost,signal);
+      signal?.throwIfAborted();
+      body.gotrue_meta_security={captcha_token:token};
+    }
+    await request('/auth/v1/otp',{method:'POST',body});
     otpChannel=channel;otpTarget=target;
     setMessage(channel==='email'?'Check your email for the one-time verification code.':'Check your mobile SMS for the one-time verification code.','local');
     return {contact:target,channel,mode};
@@ -302,8 +312,13 @@
   async function sendEmail(form) {
     const data=new FormData(form),email=String(data.get('email')||'').trim();
     if(!validEmail(email))throw Error('Enter a valid email address.');
-    await sendOtp('email',email);
+    const submit=form.querySelector('[type=submit]');
+    if(submit?.disabled)return;
+    if(submit)submit.disabled=true;
+    try{await sendOtp('email',email,'signup',form)}
+    finally{if(submit)submit.disabled=false}
     otpEmail=email;
+    paint();
   }
   async function verifyEmail(form) {
     await verifyOtp('email',otpEmail,new FormData(form).get('token'));
