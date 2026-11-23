@@ -1,135 +1,146 @@
-# BillNest Supabase production database setup
+# BillNest Supabase: deployed database and activation
 
-## Current project connection (2026-11-23)
+**Project:** `lffgfzgzgrpatlrcctbo`
+**URL:** https://lffgfzgzgrpatlrcctbo.supabase.co
+**Deployment verified:** 2026-11-23
 
-The owner has created Supabase project `lffgfzgzgrpatlrcctbo` at
-`https://lffgfzgzgrpatlrcctbo.supabase.co`. The public project URL is
-recorded in `auth-config.js`.
+## Current status
 
-**Public client configuration is present:** The project URL and its
-public `sb_publishable_...` key are now set in `auth-config.js` for visitors.
-The publishable key is intended to be used in browser code; never replace
-it with `sb_secret_...`, `service_role` or a database password.
+The production Supabase project is connected. The project URL and public
+`sb_publishable_` key are already configured in `billnest/auth-config.js`.
+All six migrations listed below have been applied successfully to the
+remote project. This does **not** mean that Google/SMS provider settings,
+the old local-first checkout or a 100,000-user load target are complete.
 
-**Activation is not yet confirmed:** The target project's SQL migrations,
-RLS policies, and Google/SMS authentication providers still require
-installation, configuration and live tests. A public key does not itself
-create database tables or enable SMS or Google OAuth.
+- Nine `bn_*` shop, membership, product, customer, invoice, invoice item,
+  stock movement, payment and accounting tables with RLS
+- Separate `billnest_cloud_backups` table, private to each logged-in user
+- Eight performance indexes covering foreign keys
+- Tenant-aware, role-authorized RPCs for shop/product/customer management,
+  invoice issuance, receipts and existing-user staff membership
+- Unnecessary anonymous/authenticated `EXECUTE` on the existing
+  `public.rls_auto_enable()` event-trigger helper revoked
 
-The project has **not** been accessed, its migrations have **not** been
-executed, its RLS policies have **not** been live-tested, and its Google/SMS
-providers have **not** been activated by these repository changes.
+The database was empty before deployment. The rollback-only security and
+transaction tests left no dummy shops, invoices, users or payments in the
+remote project. This was verified using SQL.
 
-After testing with local Supabase and reviewing backups, the owner can
-use `supabase link --project-ref lffgfzgzgrpatlrcctbo` to select the
-remote project explicitly. Review the migration diff before any
-`supabase db push`. Never run `supabase db reset` on a live project.
+## Actual remote migration history
 
+These filenames **match the versions recorded by the Supabase project**:
 
+| Version | Migration | Purpose |
+| --- | --- | --- |
+| 20261123133100 | bn_tenants | Tenant tables, RLS and basic RPCs |
+| 20261123133128 | bn_atomic_sales | Idempotent invoice and payment transactions |
+| 20261123133139 | bn_staff_roles | Verified staff membership management |
+| 20261123133244 | bn_restrict_existing_rls_event_helper | Restrict unnecessary event-trigger API permissions |
+| 20261123133417 | bn_device_backups | Per-user cloud backup schema and RLS |
+| 20261123133548 | bn_fk_indexes | Cover missing foreign-key indexes |
 
-The Supabase shop database is implemented as a **staged integration**. Its
-tenant-isolated schema, RLS policies, product/customer RPCs, atomic invoice
-and payment RPCs, and shop settings panel are in this repository. No live
-Supabase project has been connected or migrated by this change.
+The corresponding SQL files are in `supabase/migrations/`. The old
+`supabase-schema.sql` at the repository root remains as a reference copy
+for the cloud backup schema, **not** another migration to reapply.
 
-**Important:** Existing browser billing, inventory, accounts and invoice
-history still use the local workspace, with optional JSON snapshot backups.
-The Cloud Shop settings panel intentionally writes to a separate PostgreSQL
-catalog. It is NOT a multi-device production checkout yet. Do not run sales
-from two cashiers against local stock expecting cloud transactions to sync.
+Before any further remote deployment, run `supabase migration list` and
+compare with the remote history. **Do not run old migration filenames
+(202611230001/2/3) or reapply these schemas through SQL Editor.**
 
-## One-time owner setup
+## Verified database behavior
 
-1. Create a Supabase project in https://supabase.com/dashboard.
-   Keep its database password, API secret/service_role and Google client
-   secret in private provider settings or a secret manager, never GitHub.
-2. In Supabase Auth settings, enable Email OTP and/or Google. For phone OTP,
-   set up and pay for a compatible SMS provider, including relevant Indian
-   DLT requirements. Configure callback/redirect allow-list for the BillNest
-   URL or your new production frontend.
-3. Install Supabase CLI locally and make sure Docker is available. From
-   `billnest/`, use:
+Executed in a single rollback-only SQL transaction against this project:
 
-   ```sh
-   supabase start
-   supabase db reset
-   supabase test db
-   node scripts/build.mjs
-   node --test tests/*.test.mjs
-   ```
+- User A cannot select User B's shop, products or shop membership.
+- Unrelated users cannot edit another shop's products.
+- Authenticated users cannot directly insert into protected business tables.
+- Creating an invoice decrements stock and writes a single invoice.
+- Repeated invoice requests with the same idempotency key return the
+  original invoice without a second stock decrement.
+- An oversell attempt is rejected and does not persist changes.
+- Payment receipt deduplication prevents duplicate payment rows.
+- Payments exceeding the outstanding balance are rejected.
+- A Viewer can read permitted shop products but cannot modify products,
+  issue invoices or remove the Owner.
+- Removing a staff member immediately removes their shop access for
+  subsequent database queries.
+- Device backups cannot be read or inserted on behalf of another user.
 
-   The `supabase/migrations/` folder contains **three ordered migrations**:
-   tenants/RLS, atomic invoice/payment RPCs and staff roles. Database tests
-   are under `supabase/tests/`. Test them on the *local* Supabase stack first.
-   Do not run `db reset` against production.
-4. After reviewing and staging the migrations, link the correct Supabase
-   project with `supabase link --project-ref YOUR_PROJECT_REF`, then use
-   `supabase db push` to apply pending migrations. Confirm the target project
-   and protect backups first. SQL runs with elevated privileges.
-5. In `billnest/auth-config.js`, deploy **only** the Project URL and a
-   public publishable/legacy anon key, for example:
+All such tests passed and rolled back. **These tests simulate signed-in
+database roles and claims; they do not replace end-to-end browser login
+testing, a full local pgTAP run or concurrent load testing.**
 
-   ```js
-   window.BILLNEST_AUTH_CONFIG = {
-     url: 'https://YOUR_PROJECT_REF.supabase.co',
-     key: 'sb_publishable_YOUR_PUBLIC_KEY'
-   };
-   ```
+The Supabase security advisor still flags the **seven intentional,
+authenticated `SECURITY DEFINER` RPC functions**. Those are publicly
+addressable via REST only for authenticated roles, and they independently
+validate `auth.uid()` and shop membership. Do not blindly remove
+`authenticated` EXECUTE grants: BillNest uses these RPCs as its narrowly
+scoped mutation API. Re-review every function's body and authorization
+when making future changes.
 
-   This is a public key, not the database password or a secret/service_role
-   key. You can also test the Project URL and public key in Settings > Cloud
-   backup on one browser before site-wide configuration.
-6. Sign in. In **Settings > Supabase shop database**, click **Refresh cloud
-   shops**. Create a cloud shop, select it and add a test product. Verify the
-   shop/product rows in Supabase Table Editor. Test with a second account
-   that it cannot list the first shop or its products.
-7. The previous `supabase-schema.sql` controls **optional local JSON
-   snapshot backups**. If you want that separate backup feature, install
-   its table and RLS as described there. It is independent of the new
-   `bn_*` business tables.
+The performance advisor's initial missing-foreign-key-index warnings were
+resolved. Newly created indexes can appear as `unused` until real
+workloads exercise them.
 
-## Security architecture
+## Owner's next actions
 
-- `bn_shops` stores shops. `bn_shop_members` links a verified
-  `auth.users` identity to a shop and role.
-- Every business row includes `shop_id`; invoice-line/product/customer
-  foreign keys also check `shop_id` to prevent cross-tenant references.
-- Public authenticated users get **SELECT** privileges with RLS. Every
-  mutation is blocked at the table permission level unless made via a
-  dedicated, server-authorized RPC.
-- The private membership-role helper checks `auth.uid()` inside a fixed
-  search-path security-definer function. The public RPCs separately verify
-  the current role before making changes.
-- Shop owners can add already registered, email-verified staff through
-  `bn_add_existing_member`. It does not send an invitation email and does
-  not create login accounts. It cannot promote another owner. Staff
-  management UI is pending.
-- Invoice creation validates product records server-side, locks stock,
-  allocates sequential invoice numbers, stores tax and price snapshots,
-  and uses idempotency keys. Payments are also idempotent and cannot exceed
-  invoice total. **These RPCs are not yet connected to existing checkout.**
-- The client sends only a short-lived access token issued by Supabase Auth
-  and a public project key. Never expose secret keys in JavaScript.
+1. Visit https://supabase.com/dashboard/project/lffgfzgzgrpatlrcctbo/auth/providers
+   and enable/configure desired login providers.
+   Email may require a verification email template for 6-digit OTPs.
+   Google requires an OAuth client ID and secret configured **only** in
+   the provider settings; Phone requires an SMS delivery provider and
+   may require Indian DLT compliance.
+2. In Supabase Auth URL configuration, add the BillNest redirect URL:
+   `https://funnyspace.github.io/funnyspace/billnest/`. Use your future
+   production domain in place of this when migrated.
+3. Open BillNest, sign in, then go to **Settings > Supabase shop database**.
+   Create a cloud shop and a test product. Verify the logged-in browser
+   sees them and another unrelated account does not.
+4. For automatic private JSON device backup, use **Settings > Cloud backup**.
+   The matching table is installed. Backups remain optional and separate
+   from the production business tables.
 
-## Current limits and next development steps
+## Development and verification
 
-1. Reconcile existing BillNest GST calculation with server tax rounding,
-   partial payments, returns, invoice numbering and immutable audit records.
-2. Build a **reviewable, consent-based import** from browser JSON backup,
-   including customer/product mapping and accounting validation. Never
-   silently overwrite or delete local data.
-3. Wire billing UI to `bn_issue_invoice` and payment UI to
-   `bn_record_payment` only after realistic transaction tests pass.
-   Build transactional customer/product reads and writes for the selected
-   shop, with server-side pagination and indexes.
-4. Build secure role invitation/member management and prove shop isolation
-   with browser API tests and the pgTAP database suite.
-5. Move production frontend off GitHub Pages, add monitoring, backup
-   restoration drills, measured capacity tests and a paid plan suitable
-   for the forecast. **100,000 concurrent users are not certified.**
+From the `billnest/` directory with Supabase CLI and Docker installed:
+
+```sh
+supabase start
+supabase db reset           # LOCAL STACK ONLY. NEVER run against live production.
+supabase test db
+node scripts/build.mjs
+node --test tests/*.test.mjs
+```
+
+When linking the already deployed remote project, use
+`supabase link --project-ref lffgfzgzgrpatlrcctbo`. Compare the
+migration list before any `supabase db push`. This project's six
+existing migrations have already been applied remotely.
+
+## Critical limitation: local and cloud stock are separate
+
+**Do not assume invoices generated by the existing Billing UI are written
+to PostgreSQL.** The original inventory, billing, accounting, saved
+invoices and client reports still use browser `localStorage`. The separate
+Cloud Shop panel allows authorized shop catalog data in Supabase but does
+not automatically synchronize the local workspace.
+
+The following still require further development and validation:
+
+- Explicit, consent-based import of local products, invoices, accounting
+  entries and stock movements, with backups and reconciliation
+- Match PostgreSQL invoice tax calculations against existing BillNest
+  GST-inclusive/exclusive, line-rounding and discount rules
+- Wire the old Billing and Payments UI to atomic Supabase RPCs only after
+  reconciliation, verification and staff-concurrency testing
+- Staff invitation UI, customer management UI, and server-side pagination
+- Commercial frontend hosting, monitored backups/restores and measured
+  production-capacity tests
+
+Never commit database passwords, OAuth client secrets, `service_role`
+or `sb_secret_` values into public code.
 
 References:
 - https://supabase.com/docs/guides/database/postgres/row-level-security
 - https://supabase.com/docs/guides/api/securing-your-api
-- https://supabase.com/docs/guides/local-development/overview
 - https://supabase.com/docs/guides/cli/local-development
+- https://supabase.com/docs/guides/database/database-linter

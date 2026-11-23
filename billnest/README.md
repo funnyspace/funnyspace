@@ -28,6 +28,18 @@ The editable source is split between `app.js` (screens and events) `logic.mjs` (
 - Sales history, basic reports, CSV exports, JSON backup and restore.
 - Responsive layout for desktop, tablet and mobile.
 
+## Connected Supabase project (2026-11-23)
+
+The project `lffgfzgzgrpatlrcctbo` is connected with a public
+publishable key. **All six remote database migrations have been deployed**
+and rollback-only tenant-isolation, role authorization, atomic invoice,
+idempotency, overpayment and backup-RLS tests passed.
+
+Read [SUPABASE_SETUP.md](SUPABASE_SETUP.md) for the actual migration
+history and authentication-provider setup. The existing Billing UI
+**continues to save locally**; cloud shop catalog and server-side RPCs
+are a separate staged integration until a verified checkout cutover.
+
 ## Supabase shop database (staged integration)
 
 BillNest now includes a tenant-scoped PostgreSQL schema, Row Level Security,

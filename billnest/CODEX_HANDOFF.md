@@ -35,10 +35,10 @@ Key decisions:
 - Generated browser app: `app.bundle.js` via `scripts/build.mjs`.
 - Authentication: `auth-ui.js`, `cloud-backup.js`, `auth-config.js`.
   Email/phone OTP and Google OAuth PKCE have been coded and simulated,
-  but public `auth-config.js` still has blank Supabase settings. Do not
+  and public `auth-config.js` is configured with the owner's Supabase public key. Do not
   claim real Google/SMS login works until providers are configured and
   end-to-end tested.
-- `supabase-schema.sql` is for per-device JSON backup snapshots with
+- `supabase-schema.sql` is a reference for the already-deployed per-device JSON backup table with
   RLS on user ID. It is not the transactional business schema.
 - Current workspace data is read/written wholesale via `localStorage`;
   credentials are not a substitute for database row access checks.
