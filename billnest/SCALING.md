@@ -40,6 +40,21 @@ on changes. Exporting huge CSV files and computing accounting totals are also
 local operations and can remain slow. The 40-row UI limit is not a claim that
 100,000 records can be stored safely.
 
+## Remote deployment update (2026-11-23)
+
+The tenant SQL migrations, private device backup table, RPC authorization,
+and foreign-key indexes have been deployed and verified in the owner's
+Supabase project. Rollback-only database tests for RLS, staff roles,
+invoice stock accounting, retry idempotency and backup privacy passed.
+The remaining seven Supabase security-advisor warnings refer to
+authenticated, role-authorized RPC functions; they remain intentionally
+executable by authenticated callers and must be re-reviewed before any
+future change.
+
+**The existing local-only checkout and inventory are not yet migrated.**
+See `SUPABASE_SETUP.md` for the recorded remote migration versions,
+post-deployment checks and next steps.
+
 ## Staged Supabase implementation update (2026-11-23)
 
 A new version-controlled Supabase migration series defines tenant-scoped
