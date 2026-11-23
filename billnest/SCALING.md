@@ -40,6 +40,18 @@ on changes. Exporting huge CSV files and computing accounting totals are also
 local operations and can remain slow. The 40-row UI limit is not a claim that
 100,000 records can be stored safely.
 
+## Staged Supabase implementation update (2026-11-23)
+
+A new version-controlled Supabase migration series defines tenant-scoped
+`bn_*` tables with RLS and trusted RPCs for products, customers, invoices,
+payments and staff. BillNest Settings has an **opt-in cloud shop catalog
+panel** that connects through the existing authenticated Supabase session.
+
+The local billing/stock/expense workspace is not migrated or synchronized
+automatically, and its 100,000-record storage limitations remain. The SQL
+migrations and pgTAP tests must be executed on a real local Supabase stack
+and the results reviewed before any live rollout. See `SUPABASE_SETUP.md`.
+
 ## Required architecture for 100,000 users
 
 1. **Hosting:** move the production frontend from GitHub Pages to a commercial
