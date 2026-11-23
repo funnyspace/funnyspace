@@ -5,5 +5,5 @@
  */
 window.BILLNEST_AUTH_CONFIG = {
   url: 'https://lffgfzgzgrpatlrcctbo.supabase.co',
-  key: '' // Add only the project's PUBLIC sb_publishable_ key, never sb_secret_ or database passwords.
+  key: 'sb_publishable_ax0lintQQF0xyM_e66tYpw_bxKhjUs5' // Public client-side key. Never substitute service_role, sb_secret_, or a DB password.
 };
