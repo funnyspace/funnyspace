@@ -66,23 +66,23 @@ select throws_ok($$select public.bn_issue_invoice(
  jsonb_build_array(jsonb_build_object('product_id',(select id from bn_test_ids where kind='a_product'),'quantity',2)),
  'Cash')$$, 'P0001','Insufficient stock: Notebook','Overselling is rejected');
 
-select lives_ok($select public.bn_record_payment(
+select lives_ok($$select public.bn_record_payment(
  (select id from bn_test_ids where kind='a_shop'),
  (select id from public.bn_invoices limit 1),
  'bbbb0000-0000-4000-8000-000000000001',
- 20000,'Cash')$,'Payment records against the authorized invoice');
+ 20000,'Cash')$$,'Payment records against the authorized invoice');
 select is((select status from public.bn_invoices limit 1),'paid','Full payment marks invoice paid');
-select lives_ok($select public.bn_record_payment(
+select lives_ok($$select public.bn_record_payment(
  (select id from bn_test_ids where kind='a_shop'),
  (select id from public.bn_invoices limit 1),
  'bbbb0000-0000-4000-8000-000000000001',
- 20000,'Cash')$,'Payment idempotency prevents duplicate receipts');
+ 20000,'Cash')$$,'Payment idempotency prevents duplicate receipts');
 select is((select count(*)::integer from public.bn_payments),1,'Retry does not duplicate the payment');
-select throws_ok($select public.bn_record_payment(
+select throws_ok($$select public.bn_record_payment(
  (select id from bn_test_ids where kind='a_shop'),
  (select id from public.bn_invoices limit 1),
  'bbbb0000-0000-4000-8000-000000000002',
- 1,'Cash')$,'P0001','Payment exceeds outstanding balance','Overpayment is rejected');
+ 1,'Cash')$$,'P0001','Payment exceeds outstanding balance','Overpayment is rejected');
 
 select * from finish();
 rollback;
