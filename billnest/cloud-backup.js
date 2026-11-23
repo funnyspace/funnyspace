@@ -28,7 +28,7 @@
     let phone=raw.replace(/[\s().-]/g,'');
     if(/^\d{10}$/.test(phone))phone='+91'+phone;
     if(/^91\d{10}$/.test(phone))phone='+'+phone;
-    if(!/^\+[1-9]\d{7,14}$/.test(phone))throw Error('Enter a valid mobile number, such as 9876543210 or +919876543210.');
+    if(!/^\+[1-9]\d{7,14}$/.test(phone))throw Error('Enter a valid mobile number. For India, use 10 digits, or enter a number with its country code.');
     return phone;
   }
   const uuid = () => typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : 'bn-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
@@ -119,10 +119,21 @@
       const lower=rawDetail.toLowerCase();
       const code=String(json?.error_code||json?.code||'').toLowerCase();
       let detail=rawDetail;
-      if(response.status===429)detail='Too many attempts. Please wait before requesting another code.';
-      else if(code.includes('sms')||lower.includes('sms provider')||lower.includes('sms_send'))detail='SMS delivery is not configured or failed. The site owner must enable the Phone provider and an SMS service in Supabase.';
-      else if(lower.includes('email provider')||code.includes('email_provider'))detail='Email sign-in is disabled. The site owner must enable Email authentication in Supabase.';
-      else if(lower.includes('expired')||lower.includes('invalid otp')||lower.includes('token has expired'))detail='The verification code is incorrect or expired. Request a new code and try again.';
+      if(response.status===429||code.includes('rate_limit'))detail='Too many code requests. Wait before using Resend code, then try again.';
+      else if(code==='phone_provider_disabled'||lower.includes('unsupported phone provider'))
+        detail='Mobile verification is not available: the Supabase Phone provider or SMS service is disabled. The shop owner must enable Phone authentication and configure an SMS provider. You can use Email ID instead.';
+      else if(code==='otp_disabled'||lower.includes('signups not allowed for otp'))
+        detail='OTP registration is disabled in Supabase. The shop owner must enable new user registration and the selected Email or Phone provider.';
+      else if(code.includes('sms')||lower.includes('sms provider')||lower.includes('sms_send'))
+        detail='SMS delivery failed. The shop owner must check the Phone provider, SMS service credentials and delivery status in Supabase.';
+      else if(code==='email_address_not_authorized'||lower.includes('email address not authorized'))
+        detail='Supabase cannot email this address using its default sender. The shop owner must configure custom SMTP to send codes to customers.';
+      else if(lower.includes('email provider')||code.includes('email_provider'))
+        detail='Email sign-in is disabled. The shop owner must enable Email authentication in Supabase.';
+      else if(code.includes('email')&&code.includes('rate'))
+        detail='Email sending limit reached. Try later or contact the shop owner to configure custom SMTP.';
+      else if(lower.includes('expired')||lower.includes('invalid otp')||lower.includes('token has expired'))
+        detail='The verification code is incorrect or expired. Request a new code and try again.';
       else if(!online())detail='You are offline. Connect to the internet and try again.';
       const error=new Error(detail);error.status=response.status;error.code=code;throw error;
     }
@@ -291,7 +302,7 @@
       ? {email:target,create_user:mode==='signup'}
       : {phone:target,create_user:mode==='signup',channel:'sms'}});
     otpChannel=channel;otpTarget=target;
-    setMessage(channel==='email'?'Check your email for the one-time verification code.':'Check your mobile SMS for the one-time verification code.','local');
+    setMessage(channel==='email'?'Email code requested. Check inbox and spam. The email template must contain a numeric OTP.':'SMS code requested. Check your messages; delivery depends on the configured SMS provider.','local');
     return {contact:target,channel,mode};
   }
   async function verifyOtp(channel, identifier, code) {
