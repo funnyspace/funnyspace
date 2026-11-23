@@ -56,6 +56,47 @@ This is a **single-browser prototype**, not production-grade financial software.
 
 This does **not** claim GST invoicing compliance. Actual invoices can require HSN/SAC, place of supply, customer address, GSTIN validation, sequential invoice governance, tax rules for goods/services, exemptions, e-invoicing/e-way bill integration, credit notes, returns and other particulars depending on your business. Confirm requirements with a qualified tax professional and add proper authentication, a server-side database and audit controls before real business deployment.
 
+## Deploy on Cloudflare Pages
+
+Import `funnyspace/funnyspace` into Cloudflare Workers & Pages as a **Pages**
+project. Select branch `main`, framework preset **None**, root directory
+`billnest`, build command `node scripts/build-pages.mjs`, and output directory
+`.pages-output`. Use Node.js 22 or later. The build includes the browser assets
+and APK link target. Repository documentation, tests and database SQL stay out of
+the published directory.
+
+Verify the assigned `pages.dev` URL first. In the Pages project, open **Custom
+domains → Set up a custom domain** and add the production hostname. For an apex
+domain, Cloudflare must manage the zone. For a subdomain at an external DNS
+provider, add the CNAME target shown by Pages after registering the hostname
+there. Wait for the domain and certificate to become active before directing
+users to it. See [Cloudflare's custom-domain guide](https://developers.cloudflare.com/pages/configuration/custom-domains/).
+
+### Supabase Auth and Cloudflare Turnstile
+
+1. Set `BILLNEST_SUPABASE_URL` and `BILLNEST_SUPABASE_PUBLISHABLE_KEY` in
+   the Cloudflare Pages build environment. In Supabase Auth URL Configuration,
+   allow the deployed HTTPS root URL for Google OAuth callbacks.
+2. Create a **Managed** Turnstile widget and allow the hostnames that will use
+   it. Set `BILLNEST_TURNSTILE_SITE_KEY` to the public site key in Pages and
+   redeploy. If another BillNest deployment uses this same Supabase project, give
+   it its own valid site key or allow its hostname and deploy the same public key
+   there too before enabling the Supabase setting.
+3. In Supabase Auth's **Bot and Abuse Protection** settings, enable CAPTCHA
+   protection, select **Turnstile**, and enter the widget secret there. Keep the
+   secret in Supabase. The browser gets a fresh token for each email or SMS code
+   request, including resends and Settings sign-in. Supabase validates it before
+   issuing the code. Google sign-in continues through OAuth.
+4. Verify email and SMS sign-in, signup, and resend on a staging project first.
+   Verify that Supabase rejects a request without a CAPTCHA token. See
+   [Supabase's CAPTCHA guide](https://supabase.com/docs/guides/auth/auth-captcha).
+
+Browser data belongs to the site origin. Before moving to the new hostname,
+export a JSON backup from Settings on the existing site. Open the new URL,
+sign in to the intended account if you use one, and explicitly restore the
+backup there. Compare invoices, products and balances before using the new URL
+for live billing.
+
 ## Deploy on GitHub Pages
 
 1. Create a dedicated repository named `billnest` in your GitHub account.
