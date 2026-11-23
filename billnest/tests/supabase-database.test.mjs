@@ -76,6 +76,11 @@ test('server-side database migrations require tenant RLS and explicit RPC grants
  assert.match(b,/idempotency_key/);
  assert.match(b,/Insufficient stock/);
  assert.match(c,/email_confirmed_at is not null/);
+ for(const sql of [a,b,c]){
+  assert.doesNotMatch(sql,/bn_member_role\(p_shop_id\)\) not in/,'NULL roles must be explicitly denied');
+ }
+ assert.match(a,/coalesce\(\(select private\.bn_member_role\(p_shop_id\)\),''\) not in/);
+ assert.match(c,/is distinct from 'owner'/);
  assert.ok(source('supabase/tests/tenant_rls.sql').includes('Bob cannot see Alice product'));
 });
 
