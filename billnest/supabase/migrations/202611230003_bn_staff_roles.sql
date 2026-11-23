@@ -7,7 +7,7 @@ create function public.bn_add_existing_member(
 as $$
 declare actor uuid:=auth.uid(); target uuid;
 begin
- if actor is null or (select private.bn_member_role(p_shop_id))<>'owner' then
+ if actor is null or (select private.bn_member_role(p_shop_id)) is distinct from 'owner' then
   raise exception 'Only shop owners can manage staff' using errcode='42501'; end if;
  if p_role not in ('manager','cashier','viewer') or p_role is null
  then raise exception 'Invalid staff role'; end if;
@@ -33,7 +33,7 @@ returns boolean language plpgsql security definer set search_path=''
 as $$
 declare actor uuid:=auth.uid(); affected integer;
 begin
- if actor is null or (select private.bn_member_role(p_shop_id))<>'owner' then
+ if actor is null or (select private.bn_member_role(p_shop_id)) is distinct from 'owner' then
   raise exception 'Only shop owners can manage staff' using errcode='42501'; end if;
  if p_user_id=actor then raise exception 'Owner cannot remove themself'; end if;
  delete from public.bn_shop_members
