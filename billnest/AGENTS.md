@@ -68,6 +68,16 @@ Do not represent this prototype as production-ready or capable of serving
    interface, barcode scanning, mobile UX, Google/email/phone auth UI,
    UPI invoice QR, cloud backup, and standard PDF printing.
 
+## Deployed Supabase database status
+
+The owner connected Supabase project `lffgfzgzgrpatlrcctbo`.
+Six database migrations have been installed; file versions under
+`supabase/migrations/` now match remote migration history. Rollback-only
+tenant and transaction checks passed. Run `supabase migration list`
+against the linked project before creating or pushing a new migration.
+Do not re-run the initial migration files or inadvertently reset live data.
+The local Billing UI is still separate from the cloud catalog.
+
 ## Supabase integration status (2026-11-23)
 
 Versioned migrations now exist in `supabase/migrations/` with table RLS,
