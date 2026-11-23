@@ -81,6 +81,57 @@ The performance advisor's initial missing-foreign-key-index warnings were
 resolved. Newly created indexes can appear as `unused` until real
 workloads exercise them.
 
+## OTP registration and resend troubleshooting (2026-11-23)
+
+BillNest requests OTPs via Supabase Auth `/auth/v1/otp`.
+The app now shows **Resend code** with a 60-second cooldown after a
+successful request, handles rate-limit and provider errors explicitly,
+and offers an Email ID fallback when the Phone provider rejects requests.
+A request being accepted does **not** prove SMS/email was delivered.
+
+The connected project's Auth logs showed these *actual* errors:
+`phone_provider_disabled` ("Unsupported phone provider") and
+`otp_disabled` ("Signups not allowed for otp").
+The site cannot work around these by sending more requests.
+
+### To enable real mobile codes
+
+1. Open [Supabase Phone provider](https://supabase.com/dashboard/project/lffgfzgzgrpatlrcctbo/auth/providers).
+2. Enable Phone login and signup, and connect a supported, paid SMS
+   provider such as Twilio, MessageBird, Vonage or another supported service.
+3. Configure the SMS provider's credentials and sending identity **inside
+   Supabase**, never in the website/GitHub repository.
+4. For Indian recipients, check your provider's requirements for DLT
+   sender ID, templates, route authorization and deliverability.
+5. After setup, test a phone number you control, confirm arrival of
+   the OTP, then test both registration and **Resend code**.
+
+### To enable real email codes
+
+1. Open [Supabase Email settings](https://supabase.com/dashboard/project/lffgfzgzgrpatlrcctbo/auth/providers)
+   and enable Email authentication/new account signup.
+2. In [Email Templates](https://supabase.com/dashboard/project/lffgfzgzgrpatlrcctbo/auth/templates),
+   edit **Confirm sign up** and **Magic Link / OTP** to include
+   `{{ .Token }}`, the six-digit verification code. Example:
+
+   ```html
+   <h2>BillNest verification code</h2>
+   <p>Enter this code in BillNest: <strong>{{ .Token }}</strong></p>
+   <p>If you did not request this code, ignore this message.</p>
+   ```
+
+3. The default Supabase email sender only sends to authorized project
+   team addresses and is not intended for production. Configure
+   [custom SMTP](https://supabase.com/dashboard/project/lffgfzgzgrpatlrcctbo/auth/smtp)
+   from a verified transactional email service before inviting users.
+   Store SMTP credentials **only** in Supabase.
+4. Check Supabase Auth logs, email-provider delivery logs, spam folders,
+   OTP expiration and [Auth rate limits](https://supabase.com/dashboard/project/lffgfzgzgrpatlrcctbo/auth/rate-limits).
+
+**Resend does not bypass missing SMS/SMTP providers or Supabase rate limits.**
+Do not expose a test OTP or SMS service secret in browser code. Existing
+local products, invoices and saved workspaces are unaffected.
+
 ## Owner's next actions
 
 1. Visit https://supabase.com/dashboard/project/lffgfzgzgrpatlrcctbo/auth/providers
