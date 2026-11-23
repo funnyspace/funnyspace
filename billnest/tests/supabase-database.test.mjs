@@ -62,9 +62,9 @@ test('database API rejects unauthorized endpoints and unconfigured login',async(
 });
 
 test('server-side database migrations require tenant RLS and explicit RPC grants',()=>{
- const a=source('supabase/migrations/202611230001_bn_tenants.sql');
- const b=source('supabase/migrations/202611230002_bn_atomic_sales.sql');
- const c=source('supabase/migrations/202611230003_bn_staff_roles.sql');
+ const a=source('supabase/migrations/20261123133100_bn_tenants.sql');
+ const b=source('supabase/migrations/20261123133128_bn_atomic_sales.sql');
+ const c=source('supabase/migrations/20261123133139_bn_staff_roles.sql');
  for(const table of ['bn_shops','bn_shop_members','bn_products','bn_customers','bn_invoices',
   'bn_invoice_items','bn_stock_movements','bn_payments','bn_accounting_entries']){
    assert.ok(a.includes('create table public.'+table+' '),table+' table required');
