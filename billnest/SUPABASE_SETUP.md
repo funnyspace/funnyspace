@@ -1,5 +1,28 @@
 # BillNest Supabase production database setup
 
+## Current project connection (2026-11-23)
+
+The owner has created Supabase project `lffgfzgzgrpatlrcctbo` at
+`https://lffgfzgzgrpatlrcctbo.supabase.co`. The public project URL is
+recorded in `auth-config.js`.
+
+**Still required:** Paste the project's **public publishable**
+`sb_publishable_...` key into `auth-config.js`, or connect it using
+Settings > Cloud backup for an individual browser. Find the value under
+Supabase Dashboard > Project Settings > API Keys (or the Connect dialog).
+Do not copy `sb_secret_...`, `service_role`, or the database password.
+
+The project has **not** been accessed, its migrations have **not** been
+executed, its RLS policies have **not** been live-tested, and its Google/SMS
+providers have **not** been activated by these repository changes.
+
+After testing with local Supabase and reviewing backups, the owner can
+use `supabase link --project-ref lffgfzgzgrpatlrcctbo` to select the
+remote project explicitly. Review the migration diff before any
+`supabase db push`. Never run `supabase db reset` on a live project.
+
+
+
 The Supabase shop database is implemented as a **staged integration**. Its
 tenant-isolated schema, RLS policies, product/customer RPCs, atomic invoice
 and payment RPCs, and shop settings panel are in this repository. No live
