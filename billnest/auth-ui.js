@@ -29,7 +29,7 @@
   const old=layer.querySelector('.billnest-auth-message');
   if(old)old.remove();
   if(!notice)return;
-  const panel=layer.querySelector('.billnest-auth-panel');
+  const panel=layer.querySelector('.billnest-auth-content');
   if(!panel)return;
   const node=document.createElement('p');
   node.className='billnest-auth-message'+(noticeError?' error':'');
@@ -62,41 +62,39 @@
     (importAvailable()?'<button type="button" class="billnest-auth-primary" data-auth-import>Copy existing offline store into this account</button><p class="billnest-auth-note">Your original offline store will not be deleted.</p>':'')+
     '<button type="button" class="billnest-auth-logout" data-auth-signout>Sign out</button>';
   }else if(!cloud.hasAuthConfig?.()){
-   content='<section class="billnest-auth-setup" role="alert"><strong>Google and mobile login need activation</strong>'+
-    '<p class="billnest-auth-note">To let people sign in with their own Google account or mobile number, the site owner must connect Supabase, enable Google sign-in and configure an SMS provider for phone verification.</p>'+
-    '<p class="billnest-auth-note">Until then, you can keep using the offline billing workspace without signing in.</p>'+
-    '<button type="button" class="billnest-auth-google" data-auth-google><span class="billnest-google-g" aria-hidden="true">G</span> Continue with Google</button>'+
-    '<button type="button" class="billnest-auth-primary" data-auth-settings>Configure authentication</button>'+
+   content='<section class="billnest-auth-setup" role="alert"><strong>Email and mobile login need activation</strong>'+
+    '<p class="billnest-auth-note">Connect your Supabase project and enable email authentication or a mobile SMS provider to receive verification codes.</p>'+
+    '<p class="billnest-auth-note">You can continue using the offline billing workspace without signing in.</p>'+
+    '<button type="button" class="billnest-auth-primary" data-auth-settings>Open authentication settings</button>'+
     '<button type="button" class="billnest-auth-secondary" data-auth-close>Continue without account</button></section>';
   }else{
-   content='<button type="button" class="billnest-auth-google" data-auth-google><span class="billnest-google-g" aria-hidden="true">G</span> Continue with Google</button>'+
-    '<p class="billnest-auth-or">or sign in with a mobile number / email</p>'+
-    '<div class="billnest-auth-tabs billnest-auth-mode" role="tablist" aria-label="Account action">'+
-    '<button type="button" role="tab" data-auth-mode="signup" aria-selected="'+(mode==='signup')+'">Create account</button>'+
-    '<button type="button" role="tab" data-auth-mode="signin" aria-selected="'+(mode==='signin')+'">Sign in</button></div>'+
-    '<div class="billnest-auth-tabs" role="tablist" aria-label="Verification method">'+
+   content='<div class="billnest-auth-tabs billnest-auth-channel" role="tablist" aria-label="Sign-in method">'+
     '<button type="button" role="tab" data-auth-tab="email" aria-selected="'+(channel==='email')+'">Email ID</button>'+
     '<button type="button" role="tab" data-auth-tab="phone" aria-selected="'+(channel==='phone')+'">Mobile number</button></div>'+
     '<form id="billnestAuthSend" class="billnest-auth-form">'+
-    '<label for="billnestAuthContact">'+(channel==='email'?'Email address':'Mobile number (India +91 by default)')+'</label>'+
-    '<input id="billnestAuthContact" name="contact" '+(channel==='email'?'type="email" autocomplete="email" placeholder="you@example.com"':'type="tel" inputmode="tel" autocomplete="tel" placeholder="9876543210 or +919876543210"')+
+    '<label for="billnestAuthContact">'+(channel==='email'?'Email ID':'Mobile number')+'</label>'+
+    '<input id="billnestAuthContact" name="contact" '+(channel==='email'?'type="email" inputmode="email" autocomplete="email"':'type="tel" inputmode="tel" autocomplete="tel"')+
     ' value="'+esc(contact)+'" maxlength="200" required '+(sent?'readonly':'')+'>'+
-    (!sent?'<button type="submit" class="billnest-auth-primary" '+(busy?'disabled':'')+'>'+(mode==='signup'?'Create account with OTP':'Send login code')+'</button>':'')+'</form>'+
+    (!sent?'<button type="submit" class="billnest-auth-primary" '+(busy?'disabled':'')+'>'+(mode==='signup'?'Send registration code':'Send login code')+'</button>':'')+'</form>'+
     (sent?'<form id="billnestAuthVerify" class="billnest-auth-form"><label for="billnestAuthOtp">Verification code</label>'+
-    '<input id="billnestAuthOtp" name="otp" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6,8}" maxlength="8" placeholder="Enter 6-digit OTP" required>'+
+    '<input id="billnestAuthOtp" name="otp" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6,8}" maxlength="8" placeholder="Enter verification code" required>'+
     '<button type="submit" class="billnest-auth-primary" '+(busy?'disabled':'')+'>'+(mode==='signup'?'Verify and create account':'Verify and sign in')+'</button>'+
     '<div class="billnest-auth-otp-actions"><button type="button" data-auth-resend class="billnest-auth-secondary" '+(Date.now()<resendAfter?'disabled':'')+'>Resend verification code</button>'+
     '<button type="button" data-auth-restart class="billnest-auth-secondary">Change '+(channel==='email'?'email':'number')+'</button></div></form>':'')+
     '<p class="billnest-auth-note">'+(mode==='signup'
-      ?'New accounts are created only after email or SMS verification. No password is needed.'
-      :'Enter the same email or mobile number used for registration. This login will not create another account.')+
-    ' A working internet connection is required to receive a code.</p>';
+      ?'A new account is created after your email or mobile number is verified. No password is required.'
+      :'Enter the email ID or mobile number registered with your account. Sign in will not create another account.')+
+    ' An internet connection is required to receive a code.</p>';
   }
+  const footer=(!user&&cloud.hasAuthConfig?.())
+   ?'<div class="billnest-auth-switch"><button type="button" data-auth-mode="'+(mode==='signin'?'signup':'signin')+'">'+
+     (mode==='signin'?'Create account':'Already have an account? Sign in')+'</button></div>'
+   :'';
   layer.innerHTML='<div role="dialog" aria-modal="true" aria-labelledby="billnestAuthTitle" class="billnest-auth-panel">'+
    '<button type="button" class="billnest-auth-close" data-auth-close aria-label="Close">×</button>'+
-   '<div class="billnest-auth-title"><img src="logo-mark.svg" width="45" height="45" alt=""><h2 id="billnestAuthTitle">'+(user?'My Account':mode==='signup'?'Create your BillNest account':'Login to BillNest')+'</h2></div>'+
-   '<p class="billnest-auth-subtitle">'+(user?'Manage your account and local billing data.':'Use your Google account or verify your mobile number')+'</p>'+
-   content+'</div>';
+   '<div class="billnest-auth-title"><img src="logo-mark.svg" width="45" height="45" alt=""><h2 id="billnestAuthTitle">'+(user?'My Account':mode==='signup'?'Create account':'Sign in')+'</h2></div>'+
+   '<p class="billnest-auth-subtitle">'+(user?'Manage your account and local billing data.':'Email ID or mobile number')+'</p>'+
+   '<div class="billnest-auth-content">'+content+'</div>'+footer+'</div>';
   messageBox();
  }
  function open(){previousFocus=document.activeElement;layer.hidden=false;document.body.classList.add('billnest-auth-open');render();layer.querySelector('[data-auth-close]')?.focus()}
@@ -111,14 +109,6 @@
   const target=e.target.closest('button');
   if(!target||busy)return;
   if(target.matches('[data-auth-close]')){close();return}
-  if(target.matches('[data-auth-google]')){
-   busy=true;target.disabled=true;
-   cloud.startGoogleSignIn().catch(err=>{
-    busy=false;target.disabled=false;
-    message(err.message||'Unable to start Google login.',true);
-   });
-   return;
-  }
   if(target.matches('[data-auth-mode]')){
    mode=target.dataset.authMode;resetFlow();render();layer.querySelector('#billnestAuthContact')?.focus();return;
   }

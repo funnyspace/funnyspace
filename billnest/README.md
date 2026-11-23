@@ -242,41 +242,24 @@ Dedicated Bluetooth LE printing, 58/80 mm thermal-receipt layouts,
 printer preferences and test receipts have been removed. The removed
 printer options do not affect saved invoices or billing calculations.
 
-## Sign in with your own Google (Gmail) account or phone number
+## Sign in with email ID or mobile number
 
-BillNest has a **Continue with Google** button and an SMS OTP login flow.
-The Google button uses the recommended **OAuth authorization-code + PKCE**
-flow through Supabase. A visitor chooses their own Google account on Google's
-sign-in screen and returns to BillNest. Google passwords are never collected
-by BillNest. On mobile, users can enter their own 10-digit Indian mobile
-number (automatically converted to +91) or a full international number and
-verify a real one-time SMS code. Email OTP remains an additional option.
+The BillNest sign-in modal has an **Email ID / Mobile number** selector
+and a passwordless one-time-code flow. The default mobile field is blank;
+it does not show a sample phone number. The **Create account** action sits
+at the bottom of the modal and opens a separate registration view with a
+**Back to sign in** action. Email/mobile OTP sign-in and registration retain
+their existing behavior.
 
-**Important:** Real accounts are not available to visitors until the site owner
-finishes the one-time setup. The public file `billnest/auth-config.js` is still
-blank. GitHub Pages alone cannot issue Google sessions or SMS verification.
+**The Google sign-in button was removed from the user interface at the
+owner's request.** Older Google OAuth callback code remains in
+`cloud-backup.js`, but Google is no longer presented as a sign-in option.
 
-### Activate Google sign-in
-
-1. Create a project in the [Supabase Dashboard](https://supabase.com/dashboard).
-   In **Authentication > URL Configuration**, set the Site URL to
-   `https://funnyspace.github.io/funnyspace/billnest/` and add that exact
-   address to the redirect allow list.
-2. Open the [Google Cloud Console](https://console.cloud.google.com/),
-   configure the OAuth consent screen and create an **OAuth client ID** of type
-   **Web application**.
-3. In Google's **Authorized redirect URIs**, add your Supabase callback,
-   normally `https://YOUR-PROJECT.supabase.co/auth/v1/callback`. Copy the
-   callback from **Supabase > Authentication > Providers > Google**.
-   This Google redirect is to Supabase, **not** to GitHub Pages.
-4. In **Supabase > Authentication > Providers > Google**, enable the provider
-   and enter the Google **Client ID and Client Secret**. The Google secret
-   belongs in Supabase settings, **never** in the public GitHub repository.
-5. Edit `billnest/auth-config.js`, setting `url` to the Supabase project
-   HTTPS URL and `key` to its **public publishable or legacy anon key**.
-   Never use a Supabase secret or service_role key in website code.
-6. Deploy and use **Login / Sign up > Continue with Google**, then confirm
-   the correct email account appears in **My Account** after the redirect.
+The public Supabase project URL and publishable key are configured, and
+the tenant-scoped SQL schema has been deployed. Email and phone delivery
+still require the appropriate Supabase Auth provider settings; phone OTP
+also requires an SMS provider. The sign-in modal does not itself switch the
+existing offline billing workspace to the cloud database.
 
 ### Activate mobile-number login
 
@@ -299,9 +282,10 @@ provide server-enforced invoice authorization.
 
 ## Account creation troubleshooting (registration fix)
 
-The **Login / Sign up** button now opens separate **Create account** and **Sign in**
-tabs. New users can verify email or mobile number to register, while the Sign in
-tab avoids silently creating a new account. A 10-digit Indian mobile number is
+The **Login / Sign up** button opens a **Sign in** modal, with a centered
+**Create account** link at its bottom. New users can verify an email address
+or mobile number to register; returning users sign in without silently
+creating a new account. A 10-digit Indian mobile number is
 normalized to +91 in the API request; international numbers can be entered in
 E.164 format. The verification-code view allows a resend after 60 seconds.
 Incorrect/expired codes, rate limiting, and unconfigured Email/SMS providers
