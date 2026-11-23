@@ -6,7 +6,7 @@
 sessions, or records per business.** The original application stores a whole
 workspace in browser `localStorage`; Supabase is currently configured only for
 authentication/optional snapshot backup, not as a transactional database.
-The published `auth-config.js` remains blank until the owner connects a project.
+The public `auth-config.js` is now configured to use the owner's connected Supabase project; authentication providers and production browser migration still require setup.
 
 GitHub Pages is **not an appropriate commercial SaaS host**. GitHub documents a
 soft 100 GB/month Pages bandwidth limit and restricts hosting online businesses
