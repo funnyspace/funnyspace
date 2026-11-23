@@ -142,6 +142,19 @@
     })();
     try{return await refreshing}finally{refreshing=null}
   }
+  async function databaseRequest(path,options={}) {
+    // The authenticated REST interface is limited to BillNest database endpoints.
+    // Never expose the refresh token, public auth config, or a service key here.
+    if(typeof path!=='string'||!/^\/rest\/v1\/(?:bn_[a-z_]+|rpc\/bn_[a-z_]+)(?:\?|$)/.test(path))
+      throw Error('Invalid database endpoint.');
+    const user=session?.user?.id,epoch=authGeneration;
+    if(!ready()||!user)throw Error('Sign in to access the Supabase database.');
+    const token=await accessToken();
+    if(authGeneration!==epoch||session?.user?.id!==user)throw Error('Account changed during database request.');
+    const result=await request(path,{...options,accessToken:token});
+    if(authGeneration!==epoch||session?.user?.id!==user)throw Error('Account changed during database request.');
+    return result;
+  }
   const params = values => new URLSearchParams(values).toString();
   async function listBackups() {
     if(!ready())return;
@@ -342,6 +355,7 @@
     setRestoreHandler:handler=>{restoreHandler=handler},
     onSave:()=>{dirtySeq++;schedule(1800)},
     backupNow,
+    databaseRequest,
     isConnected:ready,
     getStatus:statusLabel,
     hasAuthConfig:()=>Boolean(config?.url&&config?.key),

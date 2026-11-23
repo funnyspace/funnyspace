@@ -68,6 +68,19 @@ Do not represent this prototype as production-ready or capable of serving
    interface, barcode scanning, mobile UX, Google/email/phone auth UI,
    UPI invoice QR, cloud backup, and standard PDF printing.
 
+## Supabase integration status (2026-11-23)
+
+Versioned migrations now exist in `supabase/migrations/` with table RLS,
+trusted shop, product and customer RPCs, atomic invoice/payment RPCs, and
+staff role functions. `shop-database.js` provides an opt-in, staged
+Cloud Shop panel in Settings, using `BillNestCloud.databaseRequest` with
+the authenticated session. Read `SUPABASE_SETUP.md` before modifications.
+
+The old local workspace and invoice checkout are **not** connected to the new
+database. Avoid silently blending the two stock ledgers, changing user
+invoices, or claiming that transactional migration is complete. Reconcile
+GST calculations, add consent-based import and browser/backend tests first.
+
 ## Next major workstream
 
 Read `CODEX_HANDOFF.md`. The priority is a staged PostgreSQL/Supabase

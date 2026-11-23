@@ -28,6 +28,22 @@ The editable source is split between `app.js` (screens and events) `logic.mjs` (
 - Sales history, basic reports, CSV exports, JSON backup and restore.
 - Responsive layout for desktop, tablet and mobile.
 
+## Supabase shop database (staged integration)
+
+BillNest now includes a tenant-scoped PostgreSQL schema, Row Level Security,
+trusted product/customer functions, atomic invoice/payment functions, and
+a Supabase cloud-shop panel in Settings. The Cloud Shop panel can create a shop
+and manage a **separate remote product catalog** after Supabase is configured.
+
+**Important:** Existing browser billing and invoices remain local. The cloud
+catalog is not yet the checkout data source, and the database functions for
+invoices/payments are not connected to the old billing UI. This is a safe
+development phase, not full production multi-user sync.
+
+Follow [SUPABASE_SETUP.md](SUPABASE_SETUP.md) to deploy migrations, configure
+the public key and test isolation. Never commit Supabase secret/service-role
+keys or database passwords. Existing browser data and backups remain untouched.
+
 ## Large catalog performance and production capacity
 
 Inventory, billing product search, invoice history, customers, profit reports,
