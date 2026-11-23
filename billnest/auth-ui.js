@@ -35,6 +35,14 @@
   node.className='billnest-auth-message'+(noticeError?' error':'');
   node.setAttribute('role','status');
   node.textContent=notice;
+  if(noticeError&&channel==='phone'&&!account()){
+   const alternative=document.createElement('button');
+   alternative.type='button';
+   alternative.className='billnest-auth-email-alternative';
+   alternative.setAttribute('data-auth-use-email','');
+   alternative.textContent='Use Email ID instead';
+   node.append(alternative);
+  }
   panel.append(node);
  }
  function message(value,error=false){notice=String(value||'');noticeError=error;messageBox()}
@@ -42,14 +50,22 @@
   contact='';sent=false;resendAfter=0;notice='';noticeError=false;
   if(resendTimer){clearTimeout(resendTimer);resendTimer=null}
  }
+ function resendSeconds(){return Math.max(0,Math.ceil((resendAfter-Date.now())/1000))}
+ function updateResendState(){
+  const remaining=resendSeconds();
+  const button=layer.querySelector('[data-auth-resend]');
+  if(button){
+   button.disabled=busy||remaining>0;
+   button.textContent=remaining?'Resend code in '+remaining+'s':'Resend code';
+  }
+  const hint=layer.querySelector('.billnest-auth-resend-hint');
+  if(hint)hint.textContent=remaining?'Did not receive a code? Try again in '+remaining+' seconds.':'Did not receive a code? You can resend it now.';
+ }
  function scheduleResend(){
-  if(resendTimer)clearTimeout(resendTimer);
-  const delay=Math.max(0,resendAfter-Date.now());
-  resendTimer=setTimeout(()=>{
-   resendTimer=null;
-   const resend=layer.querySelector('[data-auth-resend]');
-   if(resend){resend.disabled=false;resend.textContent='Resend verification code'}
-  },delay);
+  if(resendTimer){clearTimeout(resendTimer);resendTimer=null}
+  if(layer.hidden||!sent)return;
+  updateResendState();
+  if(resendSeconds()>0)resendTimer=setTimeout(scheduleResend,1000);
  }
  function render(){
   updateButton();
@@ -79,7 +95,8 @@
     (sent?'<form id="billnestAuthVerify" class="billnest-auth-form"><label for="billnestAuthOtp">Verification code</label>'+
     '<input id="billnestAuthOtp" name="otp" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6,8}" maxlength="8" placeholder="Enter verification code" required>'+
     '<button type="submit" class="billnest-auth-primary" '+(busy?'disabled':'')+'>'+(mode==='signup'?'Verify and create account':'Verify and sign in')+'</button>'+
-    '<div class="billnest-auth-otp-actions"><button type="button" data-auth-resend class="billnest-auth-secondary" '+(Date.now()<resendAfter?'disabled':'')+'>Resend verification code</button>'+
+    '<p class="billnest-auth-resend-hint" role="status" aria-live="polite">Did not receive a code? You can resend it when the countdown ends.</p>'+
+    '<div class="billnest-auth-otp-actions"><button type="button" data-auth-resend class="billnest-auth-secondary" '+(resendSeconds()>0||busy?'disabled':'')+'>'+(resendSeconds()>0?'Resend code in '+resendSeconds()+'s':'Resend code')+'</button>'+
     '<button type="button" data-auth-restart class="billnest-auth-secondary">Change '+(channel==='email'?'email':'number')+'</button></div></form>':'')+
     '<p class="billnest-auth-note">'+(mode==='signup'
       ?'A new account is created after your email or mobile number is verified. No password is required.'
@@ -97,7 +114,7 @@
    '<div class="billnest-auth-content">'+content+'</div>'+footer+'</div>';
   messageBox();
  }
- function open(){previousFocus=document.activeElement;layer.hidden=false;document.body.classList.add('billnest-auth-open');render();layer.querySelector('[data-auth-close]')?.focus()}
+ function open(){previousFocus=document.activeElement;layer.hidden=false;document.body.classList.add('billnest-auth-open');render();if(sent)scheduleResend();layer.querySelector('[data-auth-close]')?.focus()}
  function close(){
   layer.hidden=true;layer.innerHTML='';document.body.classList.remove('billnest-auth-open');
   if(resendTimer){clearTimeout(resendTimer);resendTimer=null}
@@ -109,6 +126,7 @@
   const target=e.target.closest('button');
   if(!target||busy)return;
   if(target.matches('[data-auth-close]')){close();return}
+  if(target.matches('[data-auth-use-email]')){channel='email';resetFlow();render();layer.querySelector('#billnestAuthContact')?.focus();return}
   if(target.matches('[data-auth-mode]')){
    mode=target.dataset.authMode;resetFlow();render();layer.querySelector('#billnestAuthContact')?.focus();return;
   }
@@ -132,13 +150,15 @@
    return;
   }
   if(target.matches('[data-auth-resend]')){
-   if(Date.now()<resendAfter)return;
-   busy=true;target.disabled=true;
+   if(!sent||resendSeconds()>0)return;
+   busy=true;updateResendState();
    cloud.sendOtp(channel,contact,mode).then(result=>{
     contact=result.contact;resendAfter=Date.now()+60000;
-    message('Another verification code was requested. Check your '+(channel==='email'?'email inbox':'SMS')+'.');
-    scheduleResend();
-   }).catch(err=>message(err.message||'Unable to resend the code.',true)).finally(()=>{busy=false;const b=layer.querySelector('[data-auth-resend]');if(b&&!resendTimer)b.disabled=false});
+    message('Another code was requested. Check your '+(channel==='email'?'email inbox and spam folder':'mobile SMS')+'.');
+   }).catch(err=>{
+    if(err?.status===429)resendAfter=Date.now()+60000;
+    message(err.message||'Unable to resend the code. Try again or change the contact.',true);
+   }).finally(()=>{busy=false;scheduleResend()});
   }
  });
  layer.addEventListener('submit',async e=>{
@@ -155,7 +175,7 @@
     const result=await cloud.sendOtp(channel,raw,mode);
     contact=result.contact;sent=true;resendAfter=Date.now()+60000;
     render();
-    message('Verification code requested. Check your '+(channel==='email'?'email inbox (also spam)':'mobile SMS')+'.');
+    message('Code request accepted. Check your '+(channel==='email'?'email inbox and spam folder':'mobile SMS')+'. If nothing arrives, use Resend code after the countdown.');
     scheduleResend();
     layer.querySelector('#billnestAuthOtp')?.focus();
    }else{
@@ -164,7 +184,7 @@
     close();
    }
   }catch(err){message(err.message||'Account request failed. Try again.',true)}
-  finally{busy=false;const active=layer.querySelector('[type=submit]');if(active)active.disabled=false}
+  finally{busy=false;const active=layer.querySelector('[type=submit]');if(active)active.disabled=false;updateResendState()}
  });
  document.addEventListener('keydown',e=>{
   if(layer.hidden)return;

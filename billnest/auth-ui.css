@@ -57,3 +57,11 @@ body.billnest-auth-open{overflow:hidden}
  .billnest-auth-panel{min-height:0}
  .billnest-auth-switch{margin-top:12px;padding-top:10px}
 }
+
+/* Clear recovery actions when OTP delivery is delayed or a provider is disabled. */
+.billnest-auth-resend-hint{margin:8px 0 0;font-size:12px;line-height:1.45;color:#5a7280}
+.billnest-auth-otp-actions{margin-top:5px;gap:10px}
+.billnest-auth-otp-actions [data-auth-resend]{font-size:13px;min-height:40px}
+.billnest-auth-email-alternative{display:block;width:100%;margin-top:11px;padding:9px 12px;border:1px solid #d5dfdd;border-radius:9px;background:#fff;color:#086951;font-size:13px;font-weight:750;text-align:center;cursor:pointer}
+.billnest-auth-email-alternative:hover{background:#eef8f4}
+.billnest-auth-email-alternative:focus-visible{outline:3px solid #b9dfd4;outline-offset:2px}
