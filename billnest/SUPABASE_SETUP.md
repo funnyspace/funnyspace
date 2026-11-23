@@ -6,11 +6,15 @@ The owner has created Supabase project `lffgfzgzgrpatlrcctbo` at
 `https://lffgfzgzgrpatlrcctbo.supabase.co`. The public project URL is
 recorded in `auth-config.js`.
 
-**Still required:** Paste the project's **public publishable**
-`sb_publishable_...` key into `auth-config.js`, or connect it using
-Settings > Cloud backup for an individual browser. Find the value under
-Supabase Dashboard > Project Settings > API Keys (or the Connect dialog).
-Do not copy `sb_secret_...`, `service_role`, or the database password.
+**Public client configuration is present:** The project URL and its
+public `sb_publishable_...` key are now set in `auth-config.js` for visitors.
+The publishable key is intended to be used in browser code; never replace
+it with `sb_secret_...`, `service_role` or a database password.
+
+**Activation is not yet confirmed:** The target project's SQL migrations,
+RLS policies, and Google/SMS authentication providers still require
+installation, configuration and live tests. A public key does not itself
+create database tables or enable SMS or Google OAuth.
 
 The project has **not** been accessed, its migrations have **not** been
 executed, its RLS policies have **not** been live-tested, and its Google/SMS
