@@ -222,7 +222,7 @@ create function public.bn_upsert_product(
 as $$
 declare actor uuid:=auth.uid(); old_stock int; product_id uuid; new_stock int;
 begin
- if actor is null or (select private.bn_member_role(p_shop_id)) not in ('owner','manager')
+ if actor is null or coalesce((select private.bn_member_role(p_shop_id)),'') not in ('owner','manager')
  then raise exception 'Not authorized to modify products' using errcode='42501'; end if;
  if length(btrim(coalesce(p_sku,''))) not between 1 and 80
  or length(btrim(coalesce(p_name,''))) not between 1 and 200
@@ -270,7 +270,7 @@ create function public.bn_upsert_customer(
 as $$
 declare actor uuid:=auth.uid(); result_id uuid;
 begin
- if actor is null or (select private.bn_member_role(p_shop_id)) not in ('owner','manager','cashier')
+ if actor is null or coalesce((select private.bn_member_role(p_shop_id)),'') not in ('owner','manager','cashier')
  then raise exception 'Not authorized to modify customers' using errcode='42501'; end if;
  if length(btrim(coalesce(p_name,''))) not between 1 and 200 then raise exception 'Invalid customer name'; end if;
  if p_customer_id is null then
