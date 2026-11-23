@@ -29,7 +29,7 @@ declare
  sum_tax bigint:=0; sum_total bigint:=0;
  tax_type text:='intra';
 begin
- if actor is null or (select private.bn_member_role(p_shop_id)) not in ('owner','manager','cashier')
+ if actor is null or coalesce((select private.bn_member_role(p_shop_id)),'') not in ('owner','manager','cashier')
  then raise exception 'Not permitted to create invoices' using errcode='42501'; end if;
  if p_idempotency_key is null then raise exception 'Idempotency key is required'; end if;
  if p_payment_method not in ('Cash','UPI','Card','Bank transfer','Credit') or p_payment_method is null
@@ -134,7 +134,7 @@ declare actor uuid:=auth.uid(); invoice_row public.bn_invoices%rowtype;
  paid_so_far bigint; result_id uuid; prev public.bn_payments%rowtype;
  new_paid bigint;
 begin
- if actor is null or (select private.bn_member_role(p_shop_id)) not in ('owner','manager','cashier')
+ if actor is null or coalesce((select private.bn_member_role(p_shop_id)),'') not in ('owner','manager','cashier')
  then raise exception 'Not permitted to record payments' using errcode='42501'; end if;
  if p_idempotency_key is null or p_amount_paise is null or p_amount_paise<=0
  or p_method not in ('Cash','UPI','Card','Bank transfer') or p_method is null
