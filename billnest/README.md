@@ -242,6 +242,24 @@ Dedicated Bluetooth LE printing, 58/80 mm thermal-receipt layouts,
 printer preferences and test receipts have been removed. The removed
 printer options do not affect saved invoices or billing calculations.
 
+## Verification code delivery and resend
+
+**Resend code** now appears after a successful registration/sign-in
+request, with a visible 60-second cooldown. If a provider is unavailable,
+the form explains the problem and offers an Email ID alternative.
+
+SMS and email delivery depend on Supabase Auth settings. During
+troubleshooting, this project returned **phone_provider_disabled**
+(unsupported phone provider) and **otp_disabled** (OTP signup blocked).
+The website cannot deliver SMS until the owner enables the Supabase Phone
+provider and configures a supported SMS service. Email codes require
+Email authentication, token-bearing templates and a custom SMTP provider
+for users outside the authorized Supabase project team.
+
+See [SUPABASE_SETUP.md](SUPABASE_SETUP.md#otp-registration-and-resend-troubleshooting-2026-11-23)
+for exact owner configuration and security instructions. The OTP request
+being accepted does not guarantee a message arrived.
+
 ## Sign in with email ID or mobile number
 
 The BillNest sign-in modal has an **Email ID / Mobile number** selector
