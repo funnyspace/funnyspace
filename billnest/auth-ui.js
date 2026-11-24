@@ -59,6 +59,7 @@
     if(loaded&&verified&&verified.id===account().id&&verified.expiresAt>Date.now())return;
     setLocked(true);gateStatus('Connect to the internet to verify your session.',true);return;
    }
+   if(verified&&verified.expiresAt<=Date.now())setLocked(true);
    const user=await cloud.validateSession();
    if(reloading)return;
    if(!user){
@@ -77,7 +78,7 @@
     loaded=true;loading=false;
    }
    if(reloading||account()?.id!==verified.id){reloadLocked();return;}
-   setLocked(false);if(!layer.hidden)close();
+   const wasLocked=locked;setLocked(false);if(wasLocked&&!layer.hidden)close();
   }catch(err){
    if(reloading)return;
    setLocked(true);gateStatus('Unable to verify or load your workspace. Connect to the internet and retry.',true);
