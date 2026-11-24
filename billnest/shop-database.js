@@ -25,19 +25,19 @@
  function settingsMarkup(){
    resetForAccount();
    const signed=Boolean(account());
-   const status=!cloud?.hasAuthConfig?.()?'Cloud service is currently unavailable. Contact BillNest support.':!signed?'Sign in to use your Supabase shop database.':!loaded?'Select Refresh cloud shops to check the database migration.':shops.length?'Cloud shops available. Existing browser invoices remain unchanged.':'No cloud shops found. Create one to start.';
+   const status=!cloud?.hasAuthConfig?.()?'Cloud service is currently unavailable. Contact BillNest support.':!signed?'Sign in to manage your cloud shops.':!loaded?'View your existing cloud shops or create a new one.':shops.length?'Your cloud shops are ready.':'No cloud shops yet.';
    const active=shops.find(s=>s.id===selected);
    const canEdit=['owner','manager'].includes(roles.get(selected));
-   return '<section class="card setting-section bn-database-panel" id="bnDatabasePanel" aria-label="Supabase shop database">'+
-    '<h3>▤ Supabase shop database</h3>'+
-    '<p class="mini-note"><strong>Staged integration:</strong> Secure cloud shops and product catalog are separate from offline inventory and invoices. Local billing is NOT synchronized with the database yet. Do not use both as a shared stock ledger.</p>'+
+   return '<section class="card setting-section bn-database-panel" id="bnDatabasePanel" aria-label="Cloud shops">'+
+    '<div class="bn-shop-heading"><span class="bn-shop-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 10h18l-2-6H5zM4 10v10h16V10M9 20v-6h6v6"/><path d="M8 10v2m8-2v2"/></svg></span><div><h3>Cloud Shops</h3><p>Manage your shops and online products.</p></div></div>'+
+    '<p class="bn-shop-warning">Cloud stock is separate from your local inventory and billing. Changes here do not sync with local records.</p>'+
     '<p class="mini-note">'+escapeHtml(status)+'</p>'+
     (message?'<p class="bn-db-message '+(error?'bn-db-error':'')+'" role="status">'+escapeHtml(message)+'</p>':'')+
-    (signed?'<div class="bn-db-actions"><button class="btn btn-sm" type="button" data-bn-db="refresh" '+(busy?'disabled':'')+'>Refresh cloud shops</button></div>'+
-      '<form id="bnCreateShopForm" class="bn-db-form"><label>New cloud shop name<input type="text" name="name" minlength="1" maxlength="120" required placeholder="My Shop"></label><label>State<input type="text" name="state" maxlength="100" placeholder="Bihar"></label><button class="btn btn-primary btn-sm" type="submit" '+(busy?'disabled':'')+'>Create cloud shop</button></form>'+
+    (signed?'<div class="bn-db-actions"><button class="btn btn-sm" type="button" data-bn-db="refresh" '+(busy?'disabled':'')+'>Load / refresh shops</button></div>'+
+      '<form id="bnCreateShopForm" class="bn-db-form"><h4>Create a shop</h4><label>Shop name<input type="text" name="name" minlength="1" maxlength="120" required placeholder="Enter shop name"></label><label>State (optional)<input type="text" name="state" maxlength="100" placeholder="Enter state"></label><button class="btn btn-primary btn-sm" type="submit" '+(busy?'disabled':'')+'>Create shop</button></form>'+
       (shops.length?'<div class="bn-db-select"><label for="bnShopSelect">Cloud shop</label><select id="bnShopSelect" class="select-input">'+shopOptions()+'</select></div>':'')+
       (active?'<div class="bn-db-catalog"><h4>Cloud products: '+escapeHtml(active.name)+'</h4>'+
-      '<p class="mini-note">Displaying up to 40 products from this shop. These are saved in PostgreSQL under tenant security policies.</p>'+
+      '<p class="mini-note">Showing up to 40 cloud products.</p>'+
       (products.length?'<div class="table-scroll"><table class="data-table"><thead><tr><th>SKU</th><th>Product</th><th>Price</th><th>Stock</th></tr></thead><tbody>'+
        products.map(p=>'<tr><td>'+escapeHtml(p.sku)+'</td><td>'+escapeHtml(p.name)+'</td><td>₹'+(Number(p.price_paise||0)/100).toFixed(2)+'</td><td>'+escapeHtml(p.stock_qty)+'</td></tr>').join('')+
        '</tbody></table></div>':'<p class="mini-note">No cloud products to display yet.</p>')+
@@ -46,10 +46,9 @@
        '<label>Product name<input name="name" required maxlength="200"></label>'+
        '<label>Selling price (₹)<input name="price" type="number" min="0" step="0.01" max="100000000" required></label>'+
        '<label>Opening stock<input name="stock" type="number" min="0" max="1000000" step="1" value="0" required></label>'+
-       '<button type="submit" class="btn btn-primary btn-sm" '+(busy?'disabled':'')+'>Save product in Supabase</button></form>':
+       '<button type="submit" class="btn btn-primary btn-sm" '+(busy?'disabled':'')+'>Save cloud product</button></form>':
        '<p class="mini-note">Your role cannot modify cloud products.</p>')+
-       '</div>':''):'<p class="mini-note">Sign in using Login / Sign up. The owner must first deploy the Supabase migrations.</p>')+
-    '<p class="mini-note">Existing product and invoice data in this browser are not uploaded, deleted or modified by this panel.</p>'+
+       '</div>':''):'<p class="mini-note">Sign in to get started.</p>')+
     '</section>';
  }
  function paint(){const el=document.getElementById('bnDatabasePanel');if(el)el.outerHTML=settingsMarkup()}
@@ -74,13 +73,11 @@
      if(!shops.some(s=>s.id===selected))selected=shops[0]?.id||'';
      loaded=true;
      await loadProducts();
-     setMessage('Supabase database connection verified. Cloud catalog loaded.');
+     setMessage('Cloud shops refreshed.');
    }catch(err){
      loaded=false;
-     const detail=String(err?.message||err);
-     setMessage(/bn_shops|PGRST205|not found|404/i.test(detail)?
-       'Database tables are not installed yet. Apply the SQL migrations in billnest/supabase/migrations first. '+detail:
-       'Could not load cloud shops: '+detail,true);
+     console.warn('Cloud shop refresh failed',err);
+     setMessage('Could not load cloud shops. Check your internet connection and try again.',true);
    }finally{busy=false;paint()}
  }
  async function loadProducts(){
@@ -99,7 +96,7 @@
      if(!isUuid(id))throw Error('Cloud shop response was invalid.');
      selected=id;
      await apiRefreshAfterMutation();
-     setMessage('Shop created securely in Supabase. Your offline store has not been changed.');
+     setMessage('Cloud shop created.');
    }finally{busy=false;paint()}
  }
  async function apiRefreshAfterMutation(){
@@ -139,14 +136,14 @@
    if(!shops.some(s=>s.id===next))return;
    selected=next;products=[];
    try{localStorage.setItem('billnest-cloud-shop-'+identity,selected)}catch{}
-   void (async()=>{try{await loadProducts();paint()}catch(err){setMessage(err.message,true)}})();
+   void (async()=>{try{await loadProducts();paint()}catch(err){console.warn('Cloud catalog load failed',err);setMessage('Could not load products. Please refresh your shops.',true)}})();
  });
  document.addEventListener('submit',event=>{
    const form=event.target;
    if(!['bnCreateShopForm','bnAddCloudProductForm'].includes(form?.id))return;
    event.preventDefault();
    const action=form.id==='bnCreateShopForm'?createShop:addProduct;
-   void action(form).catch(err=>setMessage(err.message,true));
+   void action(form).catch(err=>{console.warn('Cloud shop action failed',err);const msg=String(err?.message||'');setMessage(msg.startsWith('Enter a ') ? msg : 'Could not save. Please refresh your cloud shops and check whether the change was saved before trying again.',true)});
  });
  window.addEventListener('billnest-auth-changed',()=>{identity='';resetForAccount();paint()});
  globalThis.BillNestDatabase={settingsMarkup,refresh,readOnlyStatus:()=>({loaded,shops:shops.length,products:products.length})};
