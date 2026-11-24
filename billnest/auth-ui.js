@@ -23,11 +23,25 @@
  const retry=document.getElementById('billnestAuthRetry');
  const reset=document.getElementById('billnestAuthReset');
  let locked=true,verified=null,loaded=false,loading=false,checking=false,reloading=false;
+ let entitlement=null,accessDeadline=0;
+ const plan=document.getElementById('billnestPlanGate');
+ const trialBadge=document.createElement('span');trialBadge.className='billnest-trial-badge';trialBadge.hidden=true;top.prepend(trialBadge);
+ function remainingDays(){return Math.max(0,Math.ceil((accessDeadline-performance.now())/86400000));}
+ function showPlan(info){
+  const price=Number(info.price_paise)/100;
+  plan.hidden=false;plan.querySelector('[data-plan-price]').textContent='₹'+price.toLocaleString('en-IN');
+  plan.querySelector('[data-plan-contact]').textContent='Subscription payment is not yet available. Contact BillNest support to activate access.';
+  layer.hidden=true;document.body.classList.remove('billnest-auth-open');
+ }
+ function updateTrialBadge(){trialBadge.hidden=!entitlement||locked;trialBadge.textContent=entitlement?.status==='trial'?remainingDays()+' days left in trial':'Premium active';}
+ function exportExpiredData(){try{const raw=localStorage.getItem(cloud.workspaceKey());if(!raw){gateStatus('No local business data to export.',true);return;}const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([raw],{type:'application/json'}));a.download='BillNest-business-backup.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}catch{gateStatus('Unable to export your data.',true);}}
+ plan.querySelector('[data-plan-export]').addEventListener('click',exportExpiredData);
  function setLocked(value){
   locked=value;
   app.hidden=value;app.inert=value;
   gate.hidden=!value;
   document.body.toggleAttribute('data-auth-locked',value);
+  updateTrialBadge();
  }
  function gateStatus(value,canRetry=false){
   status.textContent=value;retry.hidden=!canRetry;reset.hidden=!account();
@@ -48,7 +62,7 @@
   checking=true;
   try{
    if(!account()){
-    verified=null;setLocked(true);
+    verified=null;entitlement=null;accessDeadline=0;plan.hidden=true;setLocked(true);
     if(loaded||loading){reloadLocked();return;}
     gateStatus('Sign in to access your BillNest workspace.');
     if(layer.hidden)open();else render();
@@ -56,7 +70,8 @@
    }
    if(navigator.onLine===false){
     // Existing, previously validated open tabs may work offline until token expiry.
-    if(loaded&&verified&&verified.id===account().id&&verified.expiresAt>Date.now())return;
+    if(loaded&&verified&&verified.id===account().id&&verified.expiresAt>Date.now()&&entitlement?.status!=='expired'&&performance.now()<accessDeadline)return;
+    if(entitlement&&performance.now()>=accessDeadline){setLocked(true);showPlan(entitlement);gateStatus('Your access period has ended. Connect to check subscription status.',true);return;}
     setLocked(true);gateStatus('Connect to the internet to verify your session.',true);return;
    }
    if(verified&&verified.expiresAt<=Date.now())setLocked(true);
@@ -71,6 +86,12 @@
    }
    if(verified&&verified.id!==user.id){reloadLocked();return;}
    verified=user;
+   const info=await cloud.databaseRequest('/rest/v1/rpc/bn_subscription_status',{method:'POST',body:{}});
+   if(reloading||account()?.id!==user.id){reloadLocked();return;}
+   if(!info||info.user_id!==user.id||!['trial','active','expired'].includes(info.status)||!Number.isFinite(Date.parse(info.server_now))||!Number.isFinite(Date.parse(info.access_ends_at)))throw Error('Invalid subscription status.');
+   entitlement=info;accessDeadline=performance.now()+Math.max(0,Date.parse(info.access_ends_at)-Date.parse(info.server_now));
+   if(info.status==='expired'||performance.now()>=accessDeadline){setLocked(true);showPlan(info);gateStatus('Your 15-day trial or subscription has ended.',true);return;}
+   plan.hidden=true;
    if(!loaded){
     loading=true;
     await loadScript('app.bundle.js?v=37');
@@ -81,7 +102,7 @@
    const wasLocked=locked;setLocked(false);if(wasLocked&&!layer.hidden)close();
   }catch(err){
    if(reloading)return;
-   setLocked(true);gateStatus('Unable to verify or load your workspace. Connect to the internet and retry.',true);
+   plan.hidden=true;setLocked(true);gateStatus('Unable to verify or load your workspace. Connect to the internet and retry.',true);
    // A partially initialized bundle must not be executed a second time.
    if(loading){retry.onclick=()=>reloadLocked();}
   }finally{checking=false}
@@ -100,7 +121,7 @@
    if(event.key===null||!incoming?.user?.id||incoming.user.id!==account()?.id)reloadLocked();
   }
  });
- setInterval(()=>{if(account()||loaded)void checkAccess()},30000);
+ setInterval(()=>{if(entitlement&&performance.now()>=accessDeadline&&!locked){setLocked(true);showPlan(entitlement);gateStatus('Your access period has ended. Check subscription status.',true);}if(account()||loaded)void checkAccess()},30000);
  function updateButton(){
   const signed=Boolean(account());
   btn.innerHTML='<span class="billnest-account-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></span><span class="billnest-account-text">'+(signed?'My Account':'Login / Sign up')+'</span>';
@@ -158,6 +179,7 @@
   let content='';
   if(user){
    content='<div class="billnest-auth-user"><strong class="billnest-auth-status"><span aria-hidden="true"></span>Signed in</strong><div class="billnest-auth-identity">'+esc(user.email||user.phone||'BillNest user')+'</div></div>'+
+    (entitlement?'<p class="billnest-auth-note">'+(entitlement.status==='trial'?remainingDays()+' days remaining in your free trial':entitlement.status==='active'?'Premium subscription active':'Subscription required')+'</p>':'')+
     '<p class="billnest-auth-note">Your shop data stays separate from other accounts on this device. Offline records are saved locally; cloud backup is available in Settings.</p>'+
     (importAvailable()?'<button type="button" class="billnest-auth-primary" data-auth-import>Copy existing offline store into this account</button><p class="billnest-auth-note">Your original offline store will not be deleted.</p>':'')+
     '<button type="button" class="billnest-auth-logout" data-auth-signout>Sign out</button>';
