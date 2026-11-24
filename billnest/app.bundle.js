@@ -1099,7 +1099,7 @@ function reorderProducts(products=db.products){
 const reorderQuantity = p => Math.max(1,Number(p.lowStock)+1-Number(p.stock));
 function renderReorderReport(){
  const items=reorderProducts(),page=pagedRows('reorder',items),out=items.filter(p=>p.stock===0).length;
- return `<section class="card section-card reorder-report"><div class="reorder-header"><div><h3>Low stock &amp; reorder</h3><p class="mini-note">Current inventory at or below its low-stock alert level, regardless of report dates.</p></div><button type="button" class="btn btn-sm" data-action="export-reorder" ${items.length?'':'disabled'}>↓ Export reorder list</button></div><div class="reorder-summary"><span class="chip yellow">${items.length} need reorder</span><span class="chip red">${out} out of stock</span></div>${items.length?`<p class="mini-note">Minimum top-up is the quantity needed to move above the alert level. Adjust your order to actual demand. Record stock only after receiving it.</p><div class="table-scroll"><table class="data-table reorder-table"><thead><tr><th>Product</th><th>In stock</th><th>Alert level</th><th>Min. top-up</th><th>Status</th><th>Action</th></tr></thead><tbody>${page.visible.map((p,i)=>`<tr><td><div class="product-cell">${productAvatar(p,i)}<div><strong>${e(p.name)}</strong><small>${e(p.sku)}</small></div></div></td><td>${p.stock} ${e(p.unit)}</td><td>${p.lowStock}</td><td><strong>${reorderQuantity(p)} ${e(p.unit)}</strong></td><td>${productStatus(p)}</td><td><button type="button" class="btn btn-sm" data-action="stock" data-id="${e(p.id)}">Receive stock</button></td></tr>`).join('')}</tbody></table></div>${page.controls}`:empty('✓','No products need reordering','All products are above their low-stock alert levels.')}</section>`;
+ return `<section class="card section-card reorder-report"><div class="reorder-header"><div><h3>Low stock &amp; refill</h3><p class="mini-note">Current inventory at or below its low-stock alert level, regardless of report dates.</p></div><button type="button" class="btn btn-sm" data-action="export-reorder" ${items.length?'':'disabled'}>↓ Export reorder list</button></div><div class="reorder-summary"><span class="chip yellow">${items.length} need reorder</span><span class="chip red">${out} out of stock</span></div>${items.length?`<p class="mini-note">Suggested refill is the minimum quantity needed to move above the alert level. Select Refill stock to record goods you have actually received.</p><div class="table-scroll"><table class="data-table reorder-table"><thead><tr><th>Product</th><th>In stock</th><th>Alert level</th><th>Suggested refill</th><th>Status</th><th>Action</th></tr></thead><tbody>${page.visible.map((p,i)=>`<tr><td><div class="product-cell">${productAvatar(p,i)}<div><strong>${e(p.name)}</strong><small>${e(p.sku)}</small></div></div></td><td>${p.stock} ${e(p.unit)}</td><td>${p.lowStock}</td><td><strong>${reorderQuantity(p)} ${e(p.unit)}</strong></td><td>${productStatus(p)}</td><td><button type="button" class="btn btn-sm btn-primary refill-action" data-action="refill-stock" data-id="${e(p.id)}">+ Refill stock</button></td></tr>`).join('')}</tbody></table></div>${page.controls}`:empty('✓','No products need reordering','All products are above their low-stock alert levels.')}</section>`;
 }
 function renderReports(){const start=reportDateRange(),inv=db.invoices.filter(x=>x.date>=start),sales=inv.reduce((s,i)=>s+i.total,0),tax=inv.reduce((s,i)=>s+i.tax,0),count=inv.length,avg=count?Math.round(sales/count):0;
  const payments={};inv.forEach(i=>{payments[i.payment]=(payments[i.payment]||0)+i.total});
@@ -1121,6 +1121,11 @@ function renderModal(){let h='';
  if(ui.modal==='customer'){
  const c=db.customers.find(x=>x.id===ui.editId)||{};const editing=Boolean(c.id);
  h=shellModal(editing?'Edit customer':'Add customer','Customer details for invoices.',`<form id="customerForm"><div class="modal-body"><div class="form-grid">${field('Customer / business name *','name',c.name||'','text','required maxlength="90"')}${field('Phone','phone',c.phone||'','tel','maxlength="25"')}${field('Email','email',c.email||'','email','maxlength="100"')}${field('GSTIN (optional)','gstin',c.gstin||'','text','maxlength="15"')}<div class="field full"><label for="customerState">State / UT</label><select id="customerState" name="state">${stateOptions(c.state||'')}</select></div><div class="field full"><label for="customerAddress">Address</label><textarea name="address" id="customerAddress" maxlength="240">${e(c.address||'')}</textarea></div></div></div><div class="modal-footer"><button type="button" class="btn" data-action="close-modal">Cancel</button><button class="btn btn-primary" type="submit">${editing?'Save changes':'Add customer'}</button></div></form>`);
+ }
+ if(ui.modal==='refill'){
+  const p=db.products.find(x=>x.id===ui.editId);if(!p)return closeModal();
+  const suggested=reorderQuantity(p);
+  h=shellModal('Refill stock',e(p.name)+' · '+e(p.sku||''),`<form id="refillForm"><div class="modal-body"><div class="refill-metrics"><div><span>Current stock</span><strong>${p.stock} ${e(p.unit)}</strong></div><div><span>Alert level</span><strong>${p.lowStock}</strong></div><div><span>Suggested refill</span><strong>${suggested} ${e(p.unit)}</strong></div></div><p class="mini-note">Enter the quantity actually received. Change the suggested amount if needed.</p><div class="field"><label for="refillQty">Received quantity *</label><input id="refillQty" name="quantity" type="number" min="1" max="2147483647" step="1" required value="${suggested}"></div><p class="refill-result" id="refillResult" data-current="${p.stock}" data-unit="${e(p.unit)}" aria-live="polite">Stock after refill: ${p.stock+suggested} ${e(p.unit)}</p><div class="field"><label for="refillReason">Note (optional)</label><input id="refillReason" name="reason" maxlength="120" placeholder="Supplier delivery or purchase reference"></div></div><div class="modal-footer"><button type="button" class="btn" data-action="close-modal">Cancel</button><button class="btn btn-primary" type="submit">Confirm refill</button></div></form>`,'','small-modal');
  }
  if(ui.modal==='stock'){
  const p=db.products.find(x=>x.id===ui.editId);if(!p)return closeModal();
@@ -1236,6 +1241,7 @@ function handleAction(action,id){switch(action){
   db.products=db.products.filter(x=>x.id!==p.id);ui.cart=ui.cart.filter(x=>x.productId!==p.id);save();closeModal();render();toast('Product removed.');break;
  }
  case 'stock':openModal('stock',id);break;
+ case 'refill-stock':openModal('refill',id);break;
  case 'add-customer':openModal('customer');break;
  case 'edit-customer':openModal('customer',id);break;
  case 'close-modal':closeModal();break;
@@ -1331,6 +1337,17 @@ function handleForm(form){const data=Object.fromEntries(new FormData(form));try{
   if(old)Object.assign(old,attrs);else {const item={id:uid(),...attrs};db.customers.push(item);if(ui.page==='billing')ui.billingCustomer=item.id}
   save();closeModal();render();toast(old?'Customer updated.':'Customer added.');
  }
+ if(form.id==='refillForm'){
+  const p=db.products.find(x=>x.id===ui.editId);if(!p)throw Error('Product not found.');
+  if(ui.modal!=='refill')return;
+  const qty=Number(data.quantity),prev=Number(p.stock),next=prev+qty;
+  if(!Number.isSafeInteger(qty)||qty<=0||!Number.isSafeInteger(prev)||prev<0||!Number.isSafeInteger(next)||next>2147483647)throw Error('Enter a valid positive quantity within the stock limit.');
+  const previousMovementCount=db.movements.length;
+  p.stock=next;
+  db.movements.push({id:uid(),productId:p.id,change:qty,reason:String(data.reason||'').trim().slice(0,120)||'Stock refill received',date:today(),createdAt:new Date().toISOString()});
+  if(!save()){p.stock=prev;db.movements.length=previousMovementCount;return;}
+  closeModal();render();toast(`Refill saved. ${p.name}: ${p.stock} ${p.unit} in stock.`);
+ }
  if(form.id==='stockForm'){
   const p=db.products.find(x=>x.id===ui.editId),qty=Number(data.quantity);if(!p)throw Error('Product not found.');
   validateNonnegative(qty,'quantity',true);
@@ -1374,12 +1391,13 @@ document.addEventListener('click',event=>{
  const go=event.target.closest('[data-go]');if(go){navigate(go.dataset.go);return}
  const action=event.target.closest('[data-action]');if(action&&action.dataset.action!=='overlay-close'){event.preventDefault();handleAction(action.dataset.action,action.dataset.id);return}
 });
-document.addEventListener('submit',event=>{if(event.target.matches('#scanManualForm')){event.preventDefault();barcodeFound(new FormData(event.target).get('barcode'),true);return}if(event.target.matches('#productForm,#customerForm,#stockForm,#settingsForm,#accountingForm,#openingForm,#receiptForm')){event.preventDefault();handleForm(event.target)}});
+document.addEventListener('submit',event=>{if(event.target.matches('#scanManualForm')){event.preventDefault();barcodeFound(new FormData(event.target).get('barcode'),true);return}if(event.target.matches('#productForm,#customerForm,#stockForm,#refillForm,#settingsForm,#accountingForm,#openingForm,#receiptForm')){event.preventDefault();handleForm(event.target)}});
 document.addEventListener('input',event=>{
  const input=event.target;
  if(input.dataset.search){const key=input.dataset.search;const map={inventory:'search',billing:'billingSearch',sales:'salesSearch',customers:'customerSearch',profit:'profitSearch',accounting:'accountingSearch'};ui[map[key]]=input.value;ui.pages[key]=0;clearTimeout(billnestSearchTimer);billnestSearchTimer=setTimeout(()=>rerenderKeepFocus(`[data-search="${key}"]`),120);}
  if(input.id==='billDiscount'){const n=Number(input.value);ui.discount=Math.max(0,Math.min(100,Number.isFinite(n)?n:0));rerenderKeepFocus('#billDiscount')}
  if(input.id==='billCustomerSearch'){ui.billingCustomerSearch=input.value;clearTimeout(billnestSearchTimer);billnestSearchTimer=setTimeout(()=>rerenderKeepFocus('#billCustomerSearch'),120)}
+ if(input.id==='refillQty'){const output=$('#refillResult'),qty=Number(input.value);if(output){const total=Number(output.dataset.current)+qty;output.textContent=input.value!==''&&Number.isSafeInteger(qty)&&qty>0&&Number.isSafeInteger(total)&&total<=2147483647?'Stock after refill: '+total+' '+output.dataset.unit:'Enter a valid positive received quantity.';}}
  if(input.id==='billNotes')ui.billNotes=input.value;
  if(input.id==='scannerZoom')applyScannerZoom(input.value);
 });
