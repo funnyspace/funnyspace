@@ -92,15 +92,11 @@ body.billnest-auth-open{overflow:hidden}
 .billnest-auth-logout:hover,.billnest-auth-email-alternative:hover{background:#294765}
 .billnest-auth-panel button:focus-visible{outline:3px solid #99f6e4;outline-offset:2px}
 
-/* Match the primary BillNest brand lockup on authentication screens. */
-.billnest-auth-panel{background:#122338}
-.billnest-auth-panel .billnest-auth-title{display:flex;flex-direction:column;align-items:center;gap:22px;margin:8px 0 10px;text-align:center}
-.billnest-auth-panel .billnest-auth-brand{display:flex;align-items:center;justify-content:center;gap:12px;max-width:100%;background:transparent;color:#fff;text-align:left}
-.billnest-auth-panel .billnest-auth-brand img{display:block;width:64px;height:72px;flex:0 0 64px;object-fit:contain;background:transparent;padding:0;border-radius:0}
-.billnest-auth-panel .billnest-auth-wordmark{min-width:0;display:flex;flex-direction:column;align-items:flex-start}
-.billnest-auth-panel .billnest-auth-wordmark strong{display:block;color:#fff;font-size:36px;font-weight:800;line-height:1.1;letter-spacing:-1.6px}
-.billnest-auth-panel .billnest-auth-wordmark strong span{color:#91dfbb}
-.billnest-auth-panel .billnest-auth-wordmark small{display:block;color:#94a6b9;font-size:10px;font-weight:800;letter-spacing:2px;line-height:1.4;margin-top:7px;white-space:nowrap}
-.billnest-auth-panel .billnest-auth-title h2{font-size:22px;line-height:1.25;color:#f8fafc}
+/* Display the original supplied reference artwork without reconstructing its typography. */
+.billnest-auth-panel{background:#122339}
+.billnest-auth-panel .billnest-auth-title{display:flex;flex-direction:column;align-items:center;gap:0;margin:0 0 10px;text-align:center}
+.billnest-auth-panel .billnest-auth-brand{display:block;width:337px;max-width:100%;margin:0 auto;background:transparent}
+.billnest-auth-panel .billnest-auth-brand img.billnest-auth-reference-logo{display:block;width:100%;max-width:337px;height:auto;aspect-ratio:337/151;object-fit:contain;background:transparent;padding:0;border:0;border-radius:0}
+.billnest-auth-panel .billnest-auth-title h2{font-size:22px;line-height:1.25;color:#f8fafc;margin:0}
 .billnest-auth-panel .billnest-auth-subtitle{text-align:center}
-@media(max-width:390px){.billnest-auth-panel .billnest-auth-brand{gap:9px}.billnest-auth-panel .billnest-auth-brand img{width:53px;height:60px;flex-basis:53px}.billnest-auth-panel .billnest-auth-wordmark strong{font-size:30px}.billnest-auth-panel .billnest-auth-wordmark small{font-size:8px;letter-spacing:1.6px}.billnest-auth-panel .billnest-auth-title h2{font-size:20px}}
+@media(max-width:390px){.billnest-auth-panel .billnest-auth-title h2{font-size:20px}}
