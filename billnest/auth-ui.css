@@ -69,7 +69,7 @@ body.billnest-auth-open{overflow:hidden}
 /* Navy theme for sign-in, registration, verification and My Account only. */
 .billnest-auth-panel{color-scheme:dark;background:#0b1f3a;color:#f8fafc;box-shadow:0 23px 65px #0006;border:1px solid #314762}
 .billnest-auth-title h2,.billnest-auth-form label{color:#f8fafc}
-.billnest-auth-title img{background:#e9f9f5;border-radius:10px;padding:4px;box-sizing:border-box}
+.billnest-auth-title img{background:transparent;border-radius:0;padding:0;box-sizing:border-box}
 .billnest-auth-subtitle,.billnest-auth-note,.billnest-auth-resend-hint{color:#b9c9dd}
 .billnest-auth-close{color:#c7d5e7}
 .billnest-auth-close:hover{color:#fff}
@@ -91,3 +91,11 @@ body.billnest-auth-open{overflow:hidden}
 .billnest-auth-logout,.billnest-auth-email-alternative{background:#142e4d;color:#f8fafc;border-color:#526985}
 .billnest-auth-logout:hover,.billnest-auth-email-alternative:hover{background:#294765}
 .billnest-auth-panel button:focus-visible{outline:3px solid #99f6e4;outline-offset:2px}
+
+/* Stacked authentication branding on a continuous navy background. */
+.billnest-auth-panel .billnest-auth-title{display:flex;flex-direction:column;align-items:center;gap:14px;margin:4px 0 10px;text-align:center}
+.billnest-auth-panel .billnest-auth-brand{display:flex;align-items:center;justify-content:center;gap:10px;color:#f8fafc;font-weight:800;font-size:32px;line-height:1.15;letter-spacing:-.5px;background:#0b1f3a}
+.billnest-auth-panel .billnest-auth-brand img{display:block;width:48px;height:54px;object-fit:contain;background:transparent;padding:0;border-radius:0}
+.billnest-auth-panel .billnest-auth-title h2{font-size:22px;line-height:1.25;color:#f8fafc}
+.billnest-auth-panel .billnest-auth-subtitle{text-align:center}
+@media(max-width:390px){.billnest-auth-panel .billnest-auth-brand{font-size:29px}.billnest-auth-panel .billnest-auth-title h2{font-size:20px}}
