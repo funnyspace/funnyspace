@@ -358,11 +358,12 @@
 @media(max-width:700px){.cloud-small-form button,.cloud-action-row .btn{min-height:43px}.cloud-backup-panel{padding:16px}.cloud-backup-row{flex-wrap:wrap}}
 
 /* BillNest v24: memorable receipt-B icon and wordmark across desktop and mobile. */
-.sidebar .brand{gap:9px;margin-left:9px;margin-right:7px}
-.sidebar .brand-mark{width:47px;height:53px;flex:0 0 47px;display:flex;align-items:center;justify-content:center;padding:0;border-radius:0;background:transparent;color:inherit}
-.sidebar .brand-mark img{display:block;width:100%;height:100%;object-fit:contain}
-.sidebar .brand strong{font-size:24px;letter-spacing:-1.1px}
-.sidebar .brand small{font-size:7.5px;letter-spacing:1.4px;white-space:nowrap;margin-top:6px}
+.sidebar .brand{margin-left:9px;margin-right:7px}
+.sidebar .brand,.billnest-auth-title .brand,#billnestAuthGate .brand{gap:9px}
+.sidebar .brand-mark,.billnest-auth-title .brand-mark,#billnestAuthGate .brand-mark{width:47px;height:53px;flex:0 0 47px;display:flex;align-items:center;justify-content:center;padding:0;border-radius:0;background:transparent;color:inherit}
+.sidebar .brand-mark img,.billnest-auth-title .brand-mark img,#billnestAuthGate .brand-mark img{display:block;width:100%;height:100%;object-fit:contain}
+.sidebar .brand strong,.billnest-auth-title .brand strong,#billnestAuthGate .brand strong{font-size:24px;letter-spacing:-1.1px}
+.sidebar .brand small,.billnest-auth-title .brand small,#billnestAuthGate .brand small{font-size:7.5px;letter-spacing:1.4px;white-space:nowrap;margin-top:6px}
 .mobile-brand-mark{display:none}
 @media (min-width:400px) and (max-width:700px){
  .mobile-brand-mark{width:29px;height:34px;flex:0 0 29px;display:flex;justify-content:center;align-items:center;padding:4px;background:#102E43;border-radius:7px}
