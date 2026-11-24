@@ -15,8 +15,91 @@
  btn.className='billnest-account-btn';
  btn.id='billnestAccountBtn';
  top.prepend(btn);
- let mode='signin',channel='phone',contact='',sent=false,busy=false,notice='',noticeError=false,previousFocus=null,resendAfter=0,resendTimer=null;
+ let mode='signin',channel='email',contact='',sent=false,busy=false,notice='',noticeError=false,previousFocus=null,resendAfter=0,resendTimer=null;
  const account=()=>cloud.currentAccount?.()||null;
+ const app=document.getElementById('app');
+ const gate=document.getElementById('billnestAuthGate');
+ const status=document.getElementById('billnestAuthStatus');
+ const retry=document.getElementById('billnestAuthRetry');
+ const reset=document.getElementById('billnestAuthReset');
+ let locked=true,verified=null,loaded=false,loading=false,checking=false,reloading=false;
+ function setLocked(value){
+  locked=value;
+  app.hidden=value;app.inert=value;
+  gate.hidden=!value;
+  document.body.toggleAttribute('data-auth-locked',value);
+ }
+ function gateStatus(value,canRetry=false){
+  status.textContent=value;retry.hidden=!canRetry;reset.hidden=!account();
+ }
+ function reloadLocked(){
+  if(reloading)return;
+  reloading=true;setLocked(true);location.reload();
+ }
+ function loadScript(src){
+  return new Promise((resolve,reject)=>{
+   const script=document.createElement('script');script.src=src;
+   script.onload=resolve;script.onerror=()=>reject(Error('Unable to load BillNest. Please reload.'));
+   document.body.append(script);
+  });
+ }
+ async function checkAccess(){
+  if(checking||reloading)return;
+  checking=true;
+  try{
+   if(!account()){
+    verified=null;setLocked(true);
+    if(loaded||loading){reloadLocked();return;}
+    gateStatus('Sign in to access your BillNest workspace.');
+    if(layer.hidden)open();else render();
+    return;
+   }
+   if(navigator.onLine===false){
+    // Existing, previously validated open tabs may work offline until token expiry.
+    if(loaded&&verified&&verified.id===account().id&&verified.expiresAt>Date.now())return;
+    setLocked(true);gateStatus('Connect to the internet to verify your session.',true);return;
+   }
+   const user=await cloud.validateSession();
+   if(reloading)return;
+   if(!user){
+    verified=null;setLocked(true);
+    if(loaded||loading){reloadLocked();return;}
+    gateStatus('Your session has expired. Sign in again.');
+    if(layer.hidden)open();else render();
+    return;
+   }
+   if(verified&&verified.id!==user.id){reloadLocked();return;}
+   verified=user;
+   if(!loaded){
+    loading=true;
+    await loadScript('app.bundle.js?v=33');
+    await loadScript('i18n.js?v=3');
+    loaded=true;loading=false;
+   }
+   if(reloading||account()?.id!==verified.id){reloadLocked();return;}
+   setLocked(false);if(!layer.hidden)close();
+  }catch(err){
+   if(reloading)return;
+   setLocked(true);gateStatus('Unable to verify or load your workspace. Connect to the internet and retry.',true);
+   // A partially initialized bundle must not be executed a second time.
+   if(loading){retry.onclick=()=>reloadLocked();}
+  }finally{checking=false}
+ }
+ retry.addEventListener('click',()=>{if(!loading)void checkAccess()});
+ reset.addEventListener('click',()=>cloud.signOut());
+ window.addEventListener('online',()=>void checkAccess());
+ window.addEventListener('offline',()=>void checkAccess());
+ window.addEventListener('hashchange',()=>void checkAccess());
+ window.addEventListener('pageshow',()=>void checkAccess());
+ document.addEventListener('visibilitychange',()=>{if(!document.hidden)void checkAccess()});
+ window.addEventListener('storage',event=>{
+  if(event.key===null||event.key==='billnest-cloud-session-v1'){
+   const incoming=(()=>{try{return JSON.parse(event.newValue||'null')}catch{return null}})();
+   // Same-account token rotations are not account switches.
+   if(event.key===null||!incoming?.user?.id||incoming.user.id!==account()?.id)reloadLocked();
+  }
+ });
+ setInterval(()=>{if(account()||loaded)void checkAccess()},30000);
  function updateButton(){
   const signed=Boolean(account());
   btn.innerHTML='<span class="billnest-account-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/></svg></span><span class="billnest-account-text">'+(signed?'My Account':'Login / Sign up')+'</span>';
@@ -80,9 +163,7 @@
   }else if(!cloud.hasAuthConfig?.()){
    content='<section class="billnest-auth-setup" role="alert"><strong>Email and mobile login need activation</strong>'+
     '<p class="billnest-auth-note">Connect your Supabase project and enable email authentication or a mobile SMS provider to receive verification codes.</p>'+
-    '<p class="billnest-auth-note">You can continue using the offline billing workspace without signing in.</p>'+
-    '<button type="button" class="billnest-auth-primary" data-auth-settings>Open authentication settings</button>'+
-    '<button type="button" class="billnest-auth-secondary" data-auth-close>Continue without account</button></section>';
+    '<p class="billnest-auth-note">The workspace is protected. Ask the shop administrator to configure authentication, then reload.</p></section>';
   }else{
    content='<div class="billnest-auth-tabs billnest-auth-channel" role="tablist" aria-label="Sign-in method">'+
     '<button type="button" role="tab" data-auth-tab="email" aria-selected="'+(channel==='email')+'">Email ID</button>'+
@@ -108,14 +189,15 @@
      (mode==='signin'?'Create account':'Already have an account? Sign in')+'</button></div>'
    :'';
   layer.innerHTML='<div role="dialog" aria-modal="true" aria-labelledby="billnestAuthTitle" class="billnest-auth-panel">'+
-   '<button type="button" class="billnest-auth-close" data-auth-close aria-label="Close">×</button>'+
+   (!locked?'<button type="button" class="billnest-auth-close" data-auth-close aria-label="Close">×</button>':'')+
    '<div class="billnest-auth-title"><img src="logo-mark.svg" width="45" height="45" alt=""><h2 id="billnestAuthTitle">'+(user?'My Account':mode==='signup'?'Create account':'Sign in')+'</h2></div>'+
    '<p class="billnest-auth-subtitle">'+(user?'Manage your account and local billing data.':'Email ID or mobile number')+'</p>'+
    '<div class="billnest-auth-content">'+content+'</div>'+footer+'</div>';
   messageBox();
  }
- function open(){previousFocus=document.activeElement;layer.hidden=false;document.body.classList.add('billnest-auth-open');render();if(sent)scheduleResend();layer.querySelector('[data-auth-close]')?.focus()}
+ function open(){previousFocus=document.activeElement;layer.hidden=false;document.body.classList.add('billnest-auth-open');render();if(sent)scheduleResend();(layer.querySelector('[data-auth-close]')||layer.querySelector('#billnestAuthContact')||layer.querySelector('button'))?.focus()}
  function close(){
+  if(locked)return;
   layer.hidden=true;layer.innerHTML='';document.body.classList.remove('billnest-auth-open');
   if(resendTimer){clearTimeout(resendTimer);resendTimer=null}
   previousFocus?.focus?.();
@@ -195,7 +277,7 @@
   if(e.shiftKey&&document.activeElement===items[0]){e.preventDefault();items[items.length-1].focus()}
   else if(!e.shiftKey&&document.activeElement===items[items.length-1]){e.preventDefault();items[0].focus()}
  });
- window.addEventListener('billnest-auth-changed',()=>{updateButton();setTimeout(()=>location.reload(),150)});
+ window.addEventListener('billnest-auth-changed',()=>{updateButton();reloadLocked()});
  window.addEventListener('billnest-google-auth-error',()=>{
   open();
   message(cloud.getGoogleError?.()||'Google sign-in was not completed.',true);
@@ -205,4 +287,5 @@
   open();message(cloud.getGoogleError(),true);cloud.clearGoogleError?.();
  }
  updateButton();
+ void checkAccess();
 })();
