@@ -45,7 +45,8 @@
  document.addEventListener('DOMContentLoaded',()=>{
   show();
   if('serviceWorker' in navigator&&location.protocol==='https:'){
-   navigator.serviceWorker.register('./sw.js',{scope:'./'})
+   navigator.serviceWorker.register('./sw.js',{scope:'./',updateViaCache:'none'})
+    .then(registration=>{if(navigator.onLine!==false)registration.update().catch(()=>{});})
     .catch(error=>console.warn('Offline install unavailable:',error));
   }
  });
