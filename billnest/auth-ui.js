@@ -157,7 +157,7 @@
   const user=account();
   let content='';
   if(user){
-   content='<div class="billnest-auth-user"><strong>Signed in</strong>'+esc(user.email||user.phone||'BillNest user')+'</div>'+
+   content='<div class="billnest-auth-user"><strong class="billnest-auth-status"><span aria-hidden="true"></span>Signed in</strong><div class="billnest-auth-identity">'+esc(user.email||user.phone||'BillNest user')+'</div></div>'+
     '<p class="billnest-auth-note">Your shop data stays separate from other accounts on this device. Offline records are saved locally; cloud backup is available in Settings.</p>'+
     (importAvailable()?'<button type="button" class="billnest-auth-primary" data-auth-import>Copy existing offline store into this account</button><p class="billnest-auth-note">Your original offline store will not be deleted.</p>':'')+
     '<button type="button" class="billnest-auth-logout" data-auth-signout>Sign out</button>';
@@ -191,8 +191,8 @@
    :'';
   layer.innerHTML='<div role="dialog" aria-modal="true" aria-labelledby="billnestAuthTitle" class="billnest-auth-panel">'+
    (!locked?'<button type="button" class="billnest-auth-close" data-auth-close aria-label="Close">×</button>':'')+
-   '<div class="billnest-auth-title"><div class="brand"><div class="brand-mark" aria-hidden="true"><img src="logo-mark.svg?v=24" width="47" height="53" alt=""></div><div><strong>billnest<span class="brand-period">.</span></strong><small>INVENTORY + BILLING</small></div></div><h2 id="billnestAuthTitle">'+(user?'My Account':mode==='signup'?'Create account':'Sign in')+'</h2></div>'+
-   '<p class="billnest-auth-subtitle">'+(user?'Manage your account and local billing data.':'Email ID or mobile number')+'</p>'+
+   '<div class="billnest-auth-title"><div class="brand"><div class="brand-mark" aria-hidden="true"><img src="logo-mark.svg?v=24" width="47" height="53" alt=""></div><div><strong>BillNest</strong><small>INVENTORY &amp; BILLING</small></div></div><h2 id="billnestAuthTitle">'+(user?'My Account':mode==='signup'?'Create account':'Sign in')+'</h2></div>'+
+   '<p class="billnest-auth-subtitle">'+(user?'Manage your account and billing data.':'Secure access to your business workspace')+'</p>'+
    '<div class="billnest-auth-content">'+content+'</div>'+footer+'</div>';
   messageBox();
  }
