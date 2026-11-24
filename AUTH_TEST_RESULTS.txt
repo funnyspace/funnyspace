@@ -1,0 +1,41 @@
+Baseline suite summary
+1..84
+# tests 84
+# suites 0
+# pass 67
+# fail 17
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 7683.931929
+
+Targeted suite summary
+1..29
+# tests 29
+# suites 0
+# pass 29
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 3061.413582
+
+Full suite summary
+1..94
+# tests 94
+# suites 0
+# pass 87
+# fail 7
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 10290.537145
+
+Remaining pre-existing failing test names
+not ok 24 - mobile topbar headings stay left-aligned across all sections
+not ok 25 - mobile billing scan barcode and invoice history share one row
+not ok 26 - UPI billing generates an exact-amount pending invoice QR and verifies receipt manually
+not ok 27 - cloud backup is optional, saves locally first and requires confirmed restore
+not ok 42 - BillNest receipt B logo is used in sidebar and mobile header
+not ok 44 - brand update preserves core application scripts
+not ok 86 - mobile camera video fills entire preview, with a near-full-width scan guide

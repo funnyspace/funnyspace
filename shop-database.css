@@ -1,0 +1,16 @@
+
+/* Optional Supabase production-database pilot panel. */
+.bn-database-panel{display:block}
+.bn-db-message{padding:9px 12px;border-radius:8px;background:#e9f6f0;color:#185b45;font-size:13px}
+.bn-db-message.bn-db-error{background:#fff1ef;color:#9a251b}
+.bn-db-form{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap;margin:16px 0;padding:13px;border:1px solid #dce9ed;border-radius:12px}
+.bn-db-form label{display:flex;flex-direction:column;gap:6px;flex:1 1 170px;font-size:12px;font-weight:600}
+.bn-db-form input{width:100%;min-height:39px;padding:8px 11px;border:1px solid #cddde1;border-radius:8px;background:white;color:#17333f;font-size:14px}
+.bn-db-form button{min-height:40px}
+.bn-db-actions{display:flex;justify-content:flex-end}
+.bn-db-select{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:14px 0}
+.bn-db-select select{min-width:180px;max-width:100%}
+.bn-db-catalog{border-top:1px solid #e1e9ea;padding-top:14px}
+.bn-db-catalog h4{margin:10px 0}
+.bn-db-catalog .data-table{min-width:500px}
+@media(max-width:600px){.bn-db-form{align-items:stretch;flex-direction:column}.bn-db-form label,.bn-db-form button{width:100%;flex:auto}.bn-db-select{align-items:stretch;flex-direction:column}}

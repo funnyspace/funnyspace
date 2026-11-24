@@ -1,0 +1,16 @@
+/* Language switch and responsive invoice actions */
+.billnest-language-toggle{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1px solid #d5e0e2;border-radius:9px;background:#fff;color:#1d4650;min-height:36px;padding:5px 9px;font-size:12px;font-weight:750;white-space:nowrap}
+.billnest-language-toggle:hover{background:#eaf6f1}
+.billnest-language-toggle:focus-visible{outline:3px solid #b3e1d1;outline-offset:2px}
+.modal-footer{flex-wrap:wrap;gap:7px}
+.modal-footer .btn{white-space:normal}
+@media(max-width:700px){
+ .topbar .page-heading h1{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+ .topbar .top-actions{flex:0 0 auto;gap:5px}
+
+ .billnest-language-toggle{min-width:48px;min-height:37px;padding:6px 7px;font-size:11px}
+ .top-actions{gap:5px}
+ .modal-footer [data-action="print-invoice"]{flex:1 1 130px;min-height:42px}
+}
+@media(max-width:390px){.billnest-language-toggle{min-width:43px;padding:5px}.modal-footer .btn{font-size:12px}}
+@media print{.billnest-language-toggle{display:none!important}}

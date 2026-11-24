@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#101e30">
+  <meta name="description" content="BillNest. Simple inventory tracking and GST-aware billing for small shops.">
+  <title>BillNest | Smart Inventory & Billing</title>
+  <link rel="icon" href="favicon.svg?v=24" type="image/svg+xml">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="BillNest">
+  <link rel="stylesheet" href="styles.css?v=32">
+  <link rel="stylesheet" href="auth-ui.css?v=5">
+  <link rel="stylesheet" href="shop-database.css?v=1">
+  <link rel="stylesheet" href="language-ui.css?v=1">
+  <style>
+    #app[hidden], #billnestAuthGate[hidden], #billnestAuthGate [hidden] { display:none!important; }
+    body[data-auth-locked] #modalLayer, body[data-auth-locked] #scannerLayer,
+    body[data-auth-locked] #toastLayer, body[data-auth-locked] #printLayer { display:none!important; }
+    #billnestAuthGate { min-height:100vh; display:grid; place-content:center; gap:1rem; text-align:center; padding:2rem; background:#101e30; color:white; }
+    #billnestAuthGate button { justify-self:center; padding:.65rem 1rem; border-radius:.5rem; border:1px solid currentColor; }
+  </style>
+</head>
+<body data-auth-locked>
+  <section id="billnestAuthGate" aria-label="Secure BillNest workspace">
+    <img src="logo-mark.svg?v=24" width="47" height="53" alt="" style="margin:auto">
+    <h1>BillNest</h1>
+    <p id="billnestAuthStatus" role="status" aria-live="polite">Verifying your session. If this message remains, reload with internet access.</p>
+    <button type="button" id="billnestAuthRetry" hidden>Retry</button>
+    <button type="button" id="billnestAuthReset" hidden>Sign out</button>
+    <noscript>JavaScript is required to sign in.</noscript>
+  </section>
+  <div id="app" class="app-shell" hidden inert>
+    <aside class="sidebar" aria-label="Main navigation">
+      <div class="brand"><div class="brand-mark" aria-hidden="true"><img src="logo-mark.svg?v=24" width="47" height="53" alt=""></div><div><strong>billnest<span class="brand-period">.</span></strong><small>INVENTORY + BILLING</small></div></div>
+      <p class="sidebar-caption">WORKSPACE</p>
+      <nav id="navigation"></nav>
+      <div class="sidebar-bottom"><div class="store-avatar" id="storeAvatar">BN</div><div class="store-meta"><b id="storeName">My Store</b><small>Local workspace</small></div><button type="button" class="icon-button sidebar-settings" data-go="settings" title="Store settings" aria-label="Store settings">⚙</button></div>
+    </aside>
+    <div class="main-shell">
+      <header class="topbar"><button type="button" class="mobile-menu" id="menuToggle" aria-label="Open navigation">☰</button><span class="mobile-brand-mark" aria-hidden="true"><img src="logo-mark.svg?v=24" width="24" height="27" alt=""></span><div class="page-heading"><h1 id="pageTitle">Overview</h1></div><div class="top-actions"><span class="local-pill"><span class="local-dot"></span> Saved on this device</span><button type="button" class="btn btn-primary top-new" data-go="billing"><span class="plus-sign">+</span> Open Billing</button></div></header>
+      <section id="installAppCard" class="install-app-card" aria-label="Install BillNest on mobile" hidden>
+        <img src="icons/icon-192.png" width="44" height="44" alt="" loading="lazy">
+        <div class="install-app-copy"><strong>Install BillNest</strong><small>Quick access from your home screen. Works offline.</small><a class="install-apk-download" href="download/BillNest-Android-Test.apk" download="BillNest-Android-Test.apk" title="Download an Android test APK">Download APK (test)</a><p id="installAppHelp" class="install-app-help" hidden></p></div>
+        <button type="button" id="installAppButton" class="btn btn-primary">Install App</button>
+        <button type="button" id="installAppDismiss" aria-label="Dismiss app install suggestion" title="Dismiss">×</button>
+      </section>
+      <main id="main" class="page-content" tabindex="-1"><section class="card section-card"><h2>Loading your dashboard…</h2><p>If this message remains, please reload the page or use a current browser.</p></section></main>
+    </div>
+    <nav id="mobileBottomNav" class="mobile-bottom-nav" aria-label="Quick navigation"></nav>
+  </div>
+  <div id="modalLayer"></div><div id="scannerLayer"></div><div id="toastLayer" role="status" aria-live="polite"></div><div id="printLayer"></div>
+  <script defer src="install-app.js?v=27"></script>
+  <script defer src="qrcode.min.js?v=1"></script>
+  <script defer src="auth-config.js?v=4"></script>
+  <script defer src="cloud-backup.js?v=35"></script>
+  <script defer src="shop-database.js?v=1"></script>
+  <script defer src="auth-ui.js?v=7"></script>
+  <!-- The authentication gate loads the workspace and translations only after verification. -->
+</body>
+</html>
