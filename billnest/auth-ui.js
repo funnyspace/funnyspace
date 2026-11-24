@@ -33,6 +33,21 @@
   plan.querySelector('[data-plan-contact]').textContent='Subscription payment is not yet available. Contact BillNest support to activate access.';
   layer.hidden=true;document.body.classList.remove('billnest-auth-open');
  }
+ function subscriptionMarkup(){
+  const info=entitlement;
+  if(!info||info.user_id!==account()?.id)return '<section id="billnestSubscriptionPanel" class="card setting-section billnest-subscription-panel"><h3>Subscription</h3><p class="mini-note">Subscription status has not been verified yet.</p></section>';
+  const left=remainingDays(),active=performance.now()<accessDeadline&&info.status!=='expired',trial=info.status==='trial'&&active;
+  const date=value=>{const d=new Date(value);return value&&Number.isFinite(d.getTime())?d.toLocaleDateString('en-IN',{day:'numeric',month:'short',year:'numeric'}):'Not available';};
+  const amount=Number(info.price_paise)/100;
+  const price=Number.isFinite(amount)&&amount>=0?'₹'+amount.toLocaleString('en-IN'):'Not available';
+  const duration=Date.parse(info.trial_ends_at)-Date.parse(info.trial_started_at);
+  const percent=trial&&duration>0?Math.min(100,Math.max(0,(accessDeadline-performance.now())/duration*100)):0;
+  const badge=trial?'Free trial':active?'Premium active':'Expired';
+  return `<section id="billnestSubscriptionPanel" class="card setting-section billnest-subscription-panel" aria-label="Subscription information"><div class="subscription-heading"><span class="subscription-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M3 10h18M7 15h4"/></svg></span><div><h3>Subscription</h3><p class="mini-note">Manage your BillNest plan.</p></div><span class="subscription-status ${active?'is-active':''}">${badge}</span></div><div class="subscription-plan"><strong>BillNest Premium</strong><span><b>${esc(price)}</b> / month</span></div>${trial?`<div class="subscription-trial"><strong>${left} day${left===1?'':'s'} remaining</strong><span>15-day free trial</span><div class="subscription-progress" role="progressbar" aria-label="Trial remaining" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(percent)}"><div style="width:${percent}%"></div></div></div>`:''}<div class="subscription-row"><span>Trial started</span><strong>${esc(date(info.trial_started_at))}</strong></div><div class="subscription-row"><span>Trial ends</span><strong>${esc(date(info.trial_ends_at))}</strong></div><div class="subscription-row"><span>Access valid until</span><strong>${esc(date(info.access_ends_at))}</strong></div><div class="subscription-row"><span>Payment status</span><strong>${info.paid_until&&Date.parse(info.paid_until)>Date.parse(info.server_now)?'Paid':'No active paid subscription'}</strong></div><p class="mini-note subscription-note">Online subscription payments are not available yet. No automatic charges are enabled.</p><button type="button" class="btn subscription-refresh" data-subscription-refresh>Refresh subscription status</button></section>`;
+ }
+ function paintSubscription(){const panel=document.getElementById('billnestSubscriptionPanel');if(panel)panel.outerHTML=subscriptionMarkup();}
+ globalThis.BillNestSubscription=Object.freeze({settingsMarkup:subscriptionMarkup});
+ document.addEventListener('click',event=>{if(event.target.closest?.('[data-subscription-refresh]')){event.preventDefault();if(navigator.onLine===false){const b=event.target.closest('[data-subscription-refresh]');b.textContent='Connect to the internet to refresh';return;}void checkAccess();}});
  function updateTrialBadge(){trialBadge.hidden=!entitlement||locked;trialBadge.textContent=entitlement?.status==='trial'?remainingDays()+' days left in trial':'Premium active';}
  function exportExpiredData(){try{const raw=localStorage.getItem(cloud.workspaceKey());if(!raw){gateStatus('No local business data to export.',true);return;}const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([raw],{type:'application/json'}));a.download='BillNest-business-backup.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);}catch{gateStatus('Unable to export your data.',true);}}
  plan.querySelector('[data-plan-export]').addEventListener('click',exportExpiredData);
@@ -41,7 +56,7 @@
   app.hidden=value;app.inert=value;
   gate.hidden=!value;
   document.body.toggleAttribute('data-auth-locked',value);
-  updateTrialBadge();
+  updateTrialBadge();paintSubscription();
  }
  function gateStatus(value,canRetry=false){
   status.textContent=value;retry.hidden=!canRetry;reset.hidden=!account();
@@ -70,7 +85,7 @@
    }
    if(navigator.onLine===false){
     // Existing, previously validated open tabs may work offline until token expiry.
-    if(loaded&&verified&&verified.id===account().id&&verified.expiresAt>Date.now()&&entitlement?.status!=='expired'&&performance.now()<accessDeadline)return;
+    if(loaded&&verified&&verified.id===account().id&&verified.expiresAt>Date.now()&&entitlement?.status!=='expired'&&performance.now()<accessDeadline){updateTrialBadge();paintSubscription();return;}
     if(entitlement&&performance.now()>=accessDeadline){setLocked(true);showPlan(entitlement);gateStatus('Your access period has ended. Connect to check subscription status.',true);return;}
     setLocked(true);gateStatus('Connect to the internet to verify your session.',true);return;
    }
@@ -94,7 +109,7 @@
    plan.hidden=true;
    if(!loaded){
     loading=true;
-    await loadScript('app.bundle.js?v=37');
+    await loadScript('app.bundle.js?v=38');
     await loadScript('i18n.js?v=3');
     loaded=true;loading=false;
    }
