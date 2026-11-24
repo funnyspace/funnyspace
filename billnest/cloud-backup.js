@@ -104,14 +104,14 @@
     const panel=document.getElementById('cloudBackupPanel');
     if(panel){const temp=document.createElement('div');temp.innerHTML=markup();const replacement=temp.firstElementChild;if(replacement)panel.replaceWith(replacement);}
   }
-  async function request(path, {method='GET', body, accessToken, preference}={}) {
+  async function request(path, {method='GET', body, accessToken, preference, signal}={}) {
     if(!config) throw Error('Configure cloud backup first.');
     if(!online()) throw Error('Offline. Changes are safe on this device.');
     const headers={apikey:config.key};
     if(accessToken)headers.Authorization='Bearer '+accessToken;
     if(body!==undefined)headers['Content-Type']='application/json';
     if(preference)headers.Prefer=preference;
-    const response=await fetch(config.url+path,{method,headers,...(body===undefined?{}:{body:JSON.stringify(body)}),cache:'no-store'});
+    const response=await fetch(config.url+path,{method,headers,...(body===undefined?{}:{body:JSON.stringify(body)}),cache:'no-store',signal});
     const raw=await response.text();
     let json;try{json=raw?JSON.parse(raw):null}catch{json=null}
     if(!response.ok){
@@ -139,19 +139,40 @@
     }
     return json;
   }
+  const authSignal=()=>typeof AbortSignal!=='undefined'&&typeof AbortSignal.timeout==='function'?AbortSignal.timeout(15000):undefined;
   async function accessToken() {
     if(!session)throw Error('Please sign in.');
     if(Number(session.expiresAt)>Date.now()+60000)return session.access_token;
     if(refreshing)return refreshing;
     refreshing=(async()=>{
-      if(!session?.refresh_token)throw Error('Session expired. Please sign in again.');
-      const result=await request('/auth/v1/token?grant_type=refresh_token',{method:'POST',body:{refresh_token:session.refresh_token}});
-      if(!result?.access_token || !result?.refresh_token)throw Error('Cannot refresh your cloud session. Sign in again.');
+      if(!session?.refresh_token){const err=Error('Session expired. Please sign in again.');err.status=401;throw err;}
+      const generation=authGeneration,identity=session.user?.id;
+      const result=await request('/auth/v1/token?grant_type=refresh_token',{method:'POST',body:{refresh_token:session.refresh_token},signal:authSignal()});
+      if(authGeneration!==generation||session?.user?.id!==identity)throw Error('Account changed during session refresh.');
+      if(!result?.access_token || !result?.refresh_token || (result.user?.id&&result.user.id!==identity)){const err=Error('Cannot refresh your cloud session. Sign in again.');err.status=401;throw err;}
       session={access_token:result.access_token,refresh_token:result.refresh_token,expiresAt:Date.now()+Number(result.expires_in||3600)*1000,user:result.user||session.user};
       persist(SESSION_KEY,session);
       return session.access_token;
     })();
     try{return await refreshing}finally{refreshing=null}
+  }
+  // Validate cached credentials with Supabase Auth, not just localStorage.
+  async function validateSession() {
+    if(!ready())return null;
+    const identity=session.user.id, generation=authGeneration;
+    try {
+      const token=await accessToken();
+      const user=await request('/auth/v1/user',{accessToken:token,signal:authSignal()});
+      if(generation!==authGeneration||session?.user?.id!==identity)return null;
+      if(!user?.id||user.id!==identity){clearSession();return null;}
+      session={...session,user};
+      persist(SESSION_KEY,session);
+      return {id:user.id,email:user.email||'',phone:user.phone||'',expiresAt:Number(session.expiresAt)};
+    } catch(err) {
+      if(generation!==authGeneration)return null;
+      if([400,401,403].includes(err?.status)){clearSession();return null;}
+      throw err;
+    }
   }
   async function databaseRequest(path,options={}) {
     // The authenticated REST interface is limited to BillNest database endpoints.
@@ -318,8 +339,20 @@
     window.dispatchEvent(new Event('billnest-auth-changed'));
     return true;
   }
-  function signOut() {
+  function clearSession() {
     session=null;persist(SESSION_KEY,null);authGeneration++;list=[];pending=false;clearTimeout(timer);
+  }
+  function signOut() {
+    const token=session?.access_token;
+    const target=config;
+    clearSession();
+    // Revoke the current refresh session when online; local sign-out must not wait.
+    if(token&&target&&online()){
+      void fetch(target.url+'/auth/v1/logout?scope=local',{
+        method:'POST',headers:{apikey:target.key,Authorization:'Bearer '+token},
+        cache:'no-store',keepalive:true
+      }).catch(()=>{});
+    }
     setMessage('Signed out. Offline workspace remains on this device.','local');
     window.dispatchEvent(new Event('billnest-auth-changed'));
   }
@@ -371,6 +404,7 @@
     getStatus:statusLabel,
     hasAuthConfig:()=>Boolean(config?.url&&config?.key),
     currentAccount:accountInfo,
+    validateSession,
     workspaceKey,
     sendOtp,
     verifyOtp,
