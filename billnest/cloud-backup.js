@@ -139,6 +139,7 @@
     }
     return json;
   }
+  const authSignal=()=>typeof AbortSignal!=='undefined'&&typeof AbortSignal.timeout==='function'?AbortSignal.timeout(15000):undefined;
   async function accessToken() {
     if(!session)throw Error('Please sign in.');
     if(Number(session.expiresAt)>Date.now()+60000)return session.access_token;
@@ -146,7 +147,7 @@
     refreshing=(async()=>{
       if(!session?.refresh_token){const err=Error('Session expired. Please sign in again.');err.status=401;throw err;}
       const generation=authGeneration,identity=session.user?.id;
-      const result=await request('/auth/v1/token?grant_type=refresh_token',{method:'POST',body:{refresh_token:session.refresh_token}});
+      const result=await request('/auth/v1/token?grant_type=refresh_token',{method:'POST',body:{refresh_token:session.refresh_token},signal:authSignal()});
       if(authGeneration!==generation||session?.user?.id!==identity)throw Error('Account changed during session refresh.');
       if(!result?.access_token || !result?.refresh_token || (result.user?.id&&result.user.id!==identity)){const err=Error('Cannot refresh your cloud session. Sign in again.');err.status=401;throw err;}
       session={access_token:result.access_token,refresh_token:result.refresh_token,expiresAt:Date.now()+Number(result.expires_in||3600)*1000,user:result.user||session.user};
@@ -161,7 +162,7 @@
     const identity=session.user.id, generation=authGeneration;
     try {
       const token=await accessToken();
-      const user=await request('/auth/v1/user',{accessToken:token});
+      const user=await request('/auth/v1/user',{accessToken:token,signal:authSignal()});
       if(generation!==authGeneration||session?.user?.id!==identity)return null;
       if(!user?.id||user.id!==identity){clearSession();return null;}
       session={...session,user};
