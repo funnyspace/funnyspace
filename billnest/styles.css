@@ -400,3 +400,25 @@
 .billnest-page-nav button:disabled{opacity:.4;cursor:not-allowed}
 #billCustomerSearch{margin:6px 0 10px}
 @media(max-width:520px){.billnest-page-nav{gap:7px;padding:12px 10px}.billnest-page-total{flex:1 0 100%;margin:0}.billnest-page-current{margin:auto}}
+
+/* Billing: dimensional product initials and empty-cart illustration. */
+.products-picker .item-avatar {
+ --tile-light:#f2fcf7;--tile-mid:#d7f1e5;--tile-edge:#b7dacf;--tile-ink:#176d59;
+ width:35px;height:35px;position:relative;isolation:isolate;
+ background:linear-gradient(145deg,var(--tile-light) 5%,var(--tile-mid) 76%,var(--tile-edge));
+ color:var(--tile-ink);border:1px solid var(--tile-edge);border-radius:10px;
+ box-shadow:inset 1px 1px 0 #ffffffd9,inset -1px -2px 2px #122c4310,0 3px 0 var(--tile-edge),0 5px 7px #17324312;
+ font-weight:800;text-shadow:0 1px 0 #ffffffd9;
+}
+.products-picker .item-avatar.blue{--tile-light:#f3f7ff;--tile-mid:#dce8ff;--tile-edge:#b7c9eb;--tile-ink:#365b9b}
+.products-picker .item-avatar.orange{--tile-light:#fff9ec;--tile-mid:#ffebc7;--tile-edge:#e9c99b;--tile-ink:#945b17}
+.products-picker .item-avatar.purple{--tile-light:#faf6ff;--tile-mid:#e8dcfa;--tile-edge:#cbb8e5;--tile-ink:#70509b}
+.bill-card .bill-items .empty-icon {
+ font-size:0;width:72px;height:72px;flex-shrink:0;border-radius:20px;
+ background:radial-gradient(ellipse at 30% 20%,#fff 0%,#e7f8f0 55%,#d5eee4 100%);
+ border:1px solid #e0f0e9;box-shadow:inset 0 1px 1px #fff,0 5px 12px #153c3010;
+}
+.bill-card .bill-items .empty-icon::before {
+ content:"";display:block;width:60px;height:60px;
+ background:url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2096%2096%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22a%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%221%22%20y2%3D%221%22%3E%3Cstop%20stop-color%3D%22%239ef4d6%22%2F%3E%3Cstop%20offset%3D%22.48%22%20stop-color%3D%22%2335bf9d%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%23087b68%22%2F%3E%3C%2FlinearGradient%3E%3ClinearGradient%20id%3D%22b%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%220%22%20y2%3D%221%22%3E%3Cstop%20stop-color%3D%22%2345798a%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%2312344a%22%2F%3E%3C%2FlinearGradient%3E%3ClinearGradient%20id%3D%22c%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%221%22%20y2%3D%221%22%3E%3Cstop%20stop-color%3D%22%23d7fff0%22%2F%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%2336a78e%22%2F%3E%3C%2FlinearGradient%3E%3C%2Fdefs%3E%3Cellipse%20cx%3D%2249%22%20cy%3D%2282%22%20rx%3D%2233%22%20ry%3D%226%22%20fill%3D%22%230b463c%22%20opacity%3D%22.15%22%2F%3E%3Cpath%20d%3D%22M10%2015h12l12%2048h43%22%20fill%3D%22none%22%20stroke%3D%22%2312344a%22%20stroke-width%3D%227%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3Cpath%20d%3D%22M10%2012h12l12%2048h43%22%20fill%3D%22none%22%20stroke%3D%22url(%23b)%22%20stroke-width%3D%225%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%2F%3E%3Cpath%20d%3D%22M26%2026l57-7%208%209-10%2032-45%205z%22%20fill%3D%22%23087463%22%2F%3E%3Cpath%20d%3D%22M26%2026l57-7-9%2033-38%205z%22%20fill%3D%22url(%23a)%22%20stroke%3D%22%23168c75%22%20stroke-width%3D%221.4%22%20stroke-linejoin%3D%22round%22%2F%3E%3Cpath%20d%3D%22M74%2052l9-33%208%209-10%2032-45%205v-8z%22%20fill%3D%22%23087765%22%2F%3E%3Cpath%20d%3D%22M29%2026l53-7%208%208-54%208z%22%20fill%3D%22url(%23c)%22%2F%3E%3Cpath%20d%3D%22M40%2037l3%2013m10-15%201%2013m12-15-2%2013M35%2042l40-5%22%20fill%3D%22none%22%20stroke%3D%22%23e7fff5%22%20stroke-width%3D%222.6%22%20stroke-linecap%3D%22round%22%20opacity%3D%22.9%22%2F%3E%3Ccircle%20cx%3D%2240%22%20cy%3D%2275%22%20r%3D%228%22%20fill%3D%22url(%23b)%22%2F%3E%3Ccircle%20cx%3D%2240%22%20cy%3D%2275%22%20r%3D%223%22%20fill%3D%22%23a4dfd5%22%2F%3E%3Ccircle%20cx%3D%2272%22%20cy%3D%2275%22%20r%3D%228%22%20fill%3D%22url(%23b)%22%2F%3E%3Ccircle%20cx%3D%2272%22%20cy%3D%2275%22%20r%3D%223%22%20fill%3D%22%23a4dfd5%22%2F%3E%3Cpath%20d%3D%22M7%2013h10%22%20stroke%3D%22%239ef4d6%22%20stroke-width%3D%225%22%20stroke-linecap%3D%22round%22%2F%3E%3C%2Fsvg%3E") center/contain no-repeat;
+}
