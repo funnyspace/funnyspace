@@ -36,22 +36,25 @@
   if (!deviceId || !/^[\w-]{12,64}$/.test(deviceId)) {deviceId = uuid();try{localStorage.setItem(DEVICE_KEY,deviceId)}catch{}}
   // Public project identifiers may be deployed by the site owner. Never embed service_role keys.
   const deployedConfig = globalThis.BILLNEST_AUTH_CONFIG || {};
-  let config = read(CONFIG_KEY) || null;
-  const originalConfig = config;
+  const originalConfig = read(CONFIG_KEY) || null;
+  let config = null;
   if (deployedConfig.url && deployedConfig.key) {
     try {
-      config = {url:assertConfig(deployedConfig.url,deployedConfig.key),key:deployedConfig.key,deviceName:config?.deviceName||'My browser'};
+      config = {url:assertConfig(deployedConfig.url,deployedConfig.key),key:deployedConfig.key,deviceName:originalConfig?.deviceName||'My browser'};
     } catch (err) {console.error('Invalid BillNest public auth configuration',err);config=null}
   }
   let session = read(SESSION_KEY) || null;
   let googleError = '';
   // An auth token from another project must never be reused against a new project.
-  if(session && (!config || (originalConfig && (originalConfig.url!==config.url || originalConfig.key!==config.key)))){
+  if(session && (!config || (originalConfig?.url && originalConfig.url!==config.url))){
     session=null;
     persist(SESSION_KEY,null);
   }
   let workspaceReader = null;
   let restoreHandler = null;
+  let showBackups = false;
+  let listing = false;
+  let restoring = false;
   let list = [];
   let message = '';
   let state = 'local';
@@ -91,14 +94,16 @@
   }
   const deviceName = () => String(config?.deviceName || 'My browser').slice(0,60);
   function markup() {
-    const connected = ready();
-    const subtitle = 'Stores data locally first and backs up automatically when online. Backups are private to your signed-in account.';
-    const saved = list.length ? `<div class="cloud-backup-list">${list.map(row => `<div class="cloud-backup-row"><div><strong>${escapeHtml(row.device_name || 'Browser device')}</strong><small>${escapeHtml(new Date(row.saved_at).toLocaleString())} · ${Math.max(0,Math.round(Number(row.size_bytes||0)/1024))} KB ${row.device_id===deviceId?'· This device':''}</small></div><button type="button" class="btn btn-sm" data-cloud-restore="${escapeHtml(row.device_id)}">Restore</button></div>`).join('')}</div>` : `<p class="mini-note">No cloud backups listed yet.</p>`;
-    return `<section class="card setting-section cloud-backup-panel" id="cloudBackupPanel" aria-label="Cloud backup settings"><h3>☁ Cloud backup</h3><p>${subtitle}</p><div class="cloud-backup-status" role="status"><span class="cloud-indicator-dot ${connected && online() && state!=='error'?'cloud-online':''}"></span> ${escapeHtml(statusLabel())}</div>${message?`<p class="cloud-message ${state==='error'?'cloud-message-error':''}">${escapeHtml(message)}</p>`:''}
-    <form id="cloudConfigForm" class="cloud-small-form"><label for="cloudUrl">Supabase project URL</label><input id="cloudUrl" type="url" name="url" placeholder="https://your-project.supabase.co" value="${escapeHtml(config?.url||'')}" required autocomplete="off"><label for="cloudKey">Publishable (public anon) key</label><input id="cloudKey" name="key" type="text" placeholder="sb_publishable_..." value="${escapeHtml(config?.key||'')}" required autocomplete="off"><label for="cloudDeviceName">Device name</label><input id="cloudDeviceName" name="deviceName" maxlength="60" value="${escapeHtml(deviceName())}" autocomplete="off"><button class="btn btn-sm" type="submit">Save cloud connection</button><p class="mini-note">Never paste a secret, service_role or database password here. Cloud setup requires the SQL table described in the project README.</p></form>
-    ${config && !connected ? `<div class="cloud-signin-area"><form id="cloudOtpForm" class="cloud-small-form"><label for="cloudEmail">Email for cloud sign-in</label><input id="cloudEmail" type="email" name="email" value="${escapeHtml(otpEmail)}" placeholder="you@example.com" autocomplete="email" required><button class="btn btn-primary btn-sm" type="submit">Email sign-in code</button></form>${otpEmail?`<form id="cloudVerifyForm" class="cloud-small-form"><label for="cloudToken">6-digit email code</label><input id="cloudToken" name="token" inputmode="numeric" autocomplete="one-time-code" maxlength="12" placeholder="Enter emailed code" required><button class="btn btn-sm" type="submit">Verify & connect</button></form>`:''}</div>`:''}
-    ${connected ? `<p class="mini-note">Signed in as ${escapeHtml(session.user.email || session.user.phone || 'your account')}. Each device keeps its own latest backup. Restoring another device’s backup replaces this device’s workspace only after confirmation.</p><div class="cloud-action-row"><button class="btn btn-primary btn-sm" type="button" data-cloud-action="backup">Save to cloud now</button><button class="btn btn-sm" type="button" data-cloud-action="refresh">Refresh backups</button><button class="btn btn-sm" type="button" data-cloud-action="signout">Sign out</button></div>${saved}` : ''}
-    <p class="cloud-privacy-note">Online backup is optional. Your products, invoices, customer details and accounting data are uploaded to your Supabase project only after you connect and sign in. This is backup and manual restore, not automatic merging between devices.</p></section>`;
+    const signed=ready(),available=signed&&online()&&!busy&&!restoring;
+    const connected=signed&&online()&&state!=='error';
+    const last=lastSync||list.find(row=>row.device_id===deviceId)?.saved_at||'';
+    const label=!config?'Unavailable':!signed?'Sign in required':!online()?'Offline':busy?'Saving…':state==='error'?'Needs attention':'Connected';
+    const cloudIcon='<svg viewBox="0 0 24 24" width="25" height="25" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 18a4.5 4.5 0 0 1-.5-9 6 6 0 0 1 11.7-1 5 5 0 0 1 .3 10z"/></svg>';
+    const shieldIcon='<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2l8 3v7c0 5-8 10-8 10S4 17 4 12V5z"/><path d="m8.5 12 2.5 2.5 4.5-5"/></svg>';
+    const saved=list.length?`<div class="cloud-backup-list">${list.map(row=>`<div class="cloud-backup-row"><div><strong>${escapeHtml(row.device_name||'Browser device')}</strong><small>${escapeHtml(new Date(row.saved_at).toLocaleString())} · ${Math.max(0,Math.round(Number(row.size_bytes||0)/1024))} KB ${row.device_id===deviceId?'· This device':''}</small></div><button type="button" class="btn btn-sm" data-cloud-restore="${escapeHtml(row.device_id)}" ${available?'':'disabled'}>Restore</button></div>`).join('')}</div>`:'<p class="mini-note">No cloud backups found. Back up your data first.</p>';
+    return `<section class="card setting-section cloud-backup-panel" id="cloudBackupPanel" aria-label="Cloud and backup"><h3><span class="cloud-heading-icon">${cloudIcon}</span> Cloud &amp; Backup</h3><p>Manage and protect your business data.</p><div class="cloud-info-row"><span>Cloud connection</span><span class="cloud-connection-badge ${connected?'is-connected':''}" role="status">${label}</span></div><div class="cloud-info-row"><span>Device name</span><strong>${escapeHtml(deviceName())}</strong></div><div class="cloud-info-row"><span>Last backup (this device)</span><strong>${last?escapeHtml(new Date(last).toLocaleString()):'Not yet recorded'}</strong></div><div class="cloud-backup-status" role="status"><span class="cloud-indicator-dot ${connected?'cloud-online':''}"></span><span class="cloud-status-text">${escapeHtml(statusLabel())}</span></div>${message?`<p class="cloud-message ${state==='error'?'cloud-message-error':''}">${escapeHtml(message)}</p>`:''}
+    ${signed?`<div class="cloud-action-row cloud-simple-actions"><button class="btn btn-primary" type="button" data-cloud-action="backup" ${available?'':'disabled'}>${busy?'Backing up…':'Back up now'}</button><button class="btn" type="button" data-cloud-action="restore-list" aria-expanded="${showBackups}" ${available?'':'disabled'}>Restore cloud backup</button></div>${showBackups?`<div class="cloud-restore-area"><p class="mini-note">Select a saved device backup. Restoring replaces the local workspace after confirmation.</p><button type="button" class="btn btn-sm" data-cloud-action="refresh" ${listing||!available?'disabled':''}>Refresh backups</button>${listing?'<p class="mini-note" role="status">Loading backups…</p>':saved}</div>`:''}<details class="cloud-device-settings"><summary>Rename this device</summary><form id="cloudDeviceForm" class="cloud-small-form"><label for="cloudDeviceName">Device name</label><input id="cloudDeviceName" name="deviceName" maxlength="60" value="${escapeHtml(deviceName())}" autocomplete="off" required><button class="btn btn-sm" type="submit">Save device name</button></form></details>`:'<p class="mini-note">Sign in to your BillNest account to enable cloud backup.</p>'}
+    <div class="cloud-security-note">${shieldIcon}<span>Account-based access to business data.</span></div><p class="cloud-privacy-note">Changes are saved locally first. Online backups are account-specific snapshots, not live multi-device synchronization.</p></section>`;
   }
   function paint() {
     const panel=document.getElementById('cloudBackupPanel');
@@ -189,13 +194,18 @@
   }
   const params = values => new URLSearchParams(values).toString();
   async function listBackups() {
-    if(!ready())return;
+    if(!ready()||!online()||listing)return;
+    const identity=session.user.id,generation=authGeneration;
+    listing=true;paint();
     try{
       const token=await accessToken();
+      if(generation!==authGeneration||session?.user?.id!==identity)return;
       const rows=await request('/rest/v1/'+TABLE+'?'+params({select:'device_id,device_name,saved_at,size_bytes',order:'saved_at.desc',limit:'40'}),{accessToken:token});
+      if(generation!==authGeneration||session?.user?.id!==identity)return;
       list=Array.isArray(rows)?rows.filter(x=>/^[\w-]{12,64}$/.test(x.device_id)):[];
-      paint();
-    }catch(err){setMessage('Unable to list cloud backups: '+err.message,'error')}
+      if(state==='error'){state='local';message='';}
+    }catch(err){if(generation===authGeneration)setMessage('Unable to list cloud backups: '+err.message,'error')}
+    finally{if(generation===authGeneration){listing=false;paint();}}
   }
   function schedule(ms=1800){
     if(!ready()||!workspaceReader)return;
@@ -204,9 +214,10 @@
     if(online())timer=setTimeout(()=>{backupNow().catch(()=>{})},ms);
     paintStatusOnly();
   }
-  function paintStatusOnly(){const indicator=document.querySelector('#cloudBackupPanel .cloud-backup-status');if(indicator)indicator.textContent=statusLabel()}
+  function paintStatusOnly(){const indicator=document.querySelector('#cloudBackupPanel .cloud-status-text');if(indicator)indicator.textContent=statusLabel();const button=document.querySelector('#cloudBackupPanel [data-cloud-action="backup"]');if(button){button.disabled=!ready()||!online()||busy||restoring;button.textContent=busy?'Backing up…':'Back up now';}}
   async function backupNow() {
-    if(!ready())throw Error('Connect and sign in before cloud saving.');
+    if(!ready())throw Error('Sign in before cloud saving.');
+    if(restoring)return false;
     if(!online()){setMessage('Offline. Your changes are saved on this device and will upload when connected.','offline');return false}
     if(inFlight){pending=true;return inFlight}
     const snapshot=workspaceReader?.();
@@ -222,41 +233,43 @@
         await request('/rest/v1/'+TABLE+'?on_conflict=user_id,device_id',{
           method:'POST',accessToken:token,preference:'resolution=merge-duplicates,return=minimal',body:{user_id:identity,device_id:deviceId,device_name:deviceName(),saved_at:new Date().toISOString(),size_bytes:serialized.length,backup:JSON.parse(serialized)}
         });
+        if(generation!==authGeneration||session?.user?.id!==identity)return false;
         savedSeq=capture;
         pending=dirtySeq!==capture;
         lastSync=new Date().toISOString();
         state='saved';message='';
         return true;
-      }catch(err){pending=true;state='error';message='Cloud save failed: '+err.message;return false}
+      }catch(err){if(generation===authGeneration){pending=true;state='error';message='Cloud save failed: '+err.message;}return false}
       finally{busy=false;inFlight=null;paint();if(pending&&online()&&state!=='error')schedule(500)}
     })();
     return inFlight;
   }
   async function restore(device) {
-    if(!ready()||!/^[\w-]{12,64}$/.test(device))return;
+    if(!ready()||!online()||busy||restoring||!/^[\w-]{12,64}$/.test(device))return;
+    const identity=session.user.id,generation=authGeneration;
     const record=list.find(x=>x.device_id===device);
     if(!record)return setMessage('Refresh backups to select an existing device.','error');
     if(!confirm('Restore backup from '+(record.device_name||'device')+' saved '+new Date(record.saved_at).toLocaleString()+'? This replaces the local products, invoices, inventory, settings and accounting data. Download a JSON backup first if needed.'))return;
+    restoring=true;clearTimeout(timer);paint();
     try{
       const token=await accessToken();
+      if(generation!==authGeneration||session?.user?.id!==identity)return;
       const rows=await request('/rest/v1/'+TABLE+'?'+params({select:'backup',device_id:'eq.'+device,limit:'1'}),{accessToken:token});
+      if(generation!==authGeneration||session?.user?.id!==identity)return;
       if(!Array.isArray(rows)||!rows[0]?.backup)throw Error('Cloud backup not found.');
       if(!restoreHandler || restoreHandler(rows[0].backup)!==true)throw Error('Backup could not be applied safely.');
       setMessage('Cloud backup restored to this device. A fresh cloud save is queued.','saved');
-    }catch(err){setMessage('Restore failed: '+err.message,'error')}
+    }catch(err){if(generation===authGeneration)setMessage('Restore failed: '+err.message,'error')}
+    finally{if(generation===authGeneration){restoring=false;paint();if(pending&&online())schedule(500);}}
   }
-  async function handleConfig(form) {
-    const data=new FormData(form);
-    const url=assertConfig(data.get('url'),data.get('key'));
-    const key=String(data.get('key')).trim();
-    const deviceName=String(data.get('deviceName') || 'My browser').trim().slice(0,60)||'My browser';
-    const changed=config&&(config.url!==url||config.key!==key);
-    if(changed){session=null;persist(SESSION_KEY,null);authGeneration++;list=[];lastSync=''}
-    config={url,key,deviceName};
-    if(!persist(CONFIG_KEY,config))throw Error('Browser storage is unavailable.');
-    setMessage('Authentication connection saved. Open Login / Sign up in the top bar to create an account or sign in.','local');
-    if(changed)window.dispatchEvent(new Event('billnest-auth-changed'));
-    if(ready())schedule(250);
+  async function handleDeviceName(form) {
+    if(!ready())throw Error('Sign in to rename this device.');
+    const name=String(new FormData(form).get('deviceName')||'').trim().slice(0,60);
+    if(!name)throw Error('Enter a device name.');
+    if(!persist(CONFIG_KEY,{deviceName:name}))throw Error('Browser storage is unavailable.');
+    config={...config,deviceName:name};
+    setMessage('Device name saved.','local');
+    schedule(250);
   }
   // Google sign-in uses OAuth authorization code with PKCE, not URL-fragment tokens.
   // The verifier stays in sessionStorage and the code is exchanged with Supabase.
@@ -334,13 +347,13 @@
     if(!result?.access_token||!result?.refresh_token||!result?.user?.id)throw Error('Could not complete sign-in.');
     session={access_token:result.access_token,refresh_token:result.refresh_token,expiresAt:Date.now()+Number(result.expires_in||3600)*1000,user:result.user};
     if(!persist(SESSION_KEY,session)) {session=null;throw Error('Unable to save sign-in to this browser.')}
-    otpEmail='';otpTarget='';otpChannel='';authGeneration++;list=[];savedSeq=-1;
+    otpEmail='';otpTarget='';otpChannel='';authGeneration++;list=[];showBackups=false;listing=false;restoring=false;lastSync='';savedSeq=-1;
     setMessage('Account connected. Local changes will back up automatically while online.','saved');
     window.dispatchEvent(new Event('billnest-auth-changed'));
     return true;
   }
   function clearSession() {
-    session=null;persist(SESSION_KEY,null);authGeneration++;list=[];pending=false;clearTimeout(timer);
+    session=null;persist(SESSION_KEY,null);authGeneration++;list=[];showBackups=false;listing=false;restoring=false;lastSync='';pending=false;clearTimeout(timer);
   }
   function signOut() {
     const token=session?.access_token;
@@ -367,12 +380,10 @@
   }
   async function handleEvent(event) {
     const form=event.target;
-    if(!['cloudConfigForm','cloudOtpForm','cloudVerifyForm'].includes(form?.id))return;
+    if(form?.id!=='cloudDeviceForm')return;
     event.preventDefault();
     try{
-      if(form.id==='cloudConfigForm')await handleConfig(form);
-      else if(form.id==='cloudOtpForm')await sendEmail(form);
-      else await verifyEmail(form);
+      await handleDeviceName(form);
     }catch(err){setMessage(err.message,'error')}
   }
   document.addEventListener('submit',e=>{void handleEvent(e)});
@@ -384,6 +395,7 @@
     e.preventDefault();
     const action=button.dataset.cloudAction;
     if(action==='backup')backupNow().then(ok=>{if(ok){setMessage('Current workspace saved to the cloud.','saved');void listBackups()}}).catch(err=>setMessage(err.message,'error'));
+    if(action==='restore-list'){showBackups=!showBackups;paint();if(showBackups)void listBackups();}
     if(action==='refresh')void listBackups();
     if(action==='signout'){
       if(!confirm('Sign out of BillNest on this device? Your saved data will stay on this device.'))return;
