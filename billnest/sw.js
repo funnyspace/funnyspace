@@ -1,13 +1,13 @@
 /* BillNest installable offline app shell. No cloud or customer responses are cached. */
-const CACHE = 'billnest-shell-v50';
+const CACHE = 'billnest-shell-v51';
 const SHELL = [
  './','./index.html','./styles.css?v=39','./auth-ui.css?v=11','./shop-database.css?v=1','./language-ui.css?v=1','./app.bundle.js?v=37',
  './auth-config.js?v=3','./cloud-backup.js?v=35','./shop-database.js?v=2','./auth-ui.js?v=15','./i18n.js?v=3','./qrcode.min.js?v=1','./manifest.webmanifest',
- './logo-mark.svg?v=24','./favicon.svg?v=24','./install-app.js?v=26',
+ './logo-mark.svg?v=24','./favicon.svg?v=24','./install-app.js?v=27',
  './icons/icon-192.png','./icons/icon-512.png','./icons/icon-maskable-512.png'
 ];
 self.addEventListener('install',event=>{
- event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(SHELL)).then(()=>self.skipWaiting()));
+ event.waitUntil(caches.open(CACHE).then(async cache=>{for(const path of SHELL){const req=new Request(new URL(path,self.registration.scope),{cache:'reload'});const response=await fetch(req);if(!response.ok)throw Error('Shell asset unavailable: '+path);await cache.put(req,response);}}).then(()=>self.skipWaiting()));
 });
 self.addEventListener('activate',event=>{
  event.waitUntil(Promise.all([
@@ -21,19 +21,21 @@ self.addEventListener('fetch',event=>{
  const url=new URL(request.url);
  const scope=new URL(self.registration.scope);
  if(url.origin!==scope.origin||!url.pathname.startsWith(scope.pathname))return;
- // Fetch public auth config from the network first so new project settings reach installed PWAs.
- if(url.pathname.endsWith('/auth-config.js')){
-  event.respondWith(fetch(request,{cache:'no-store'}).then(response=>{
-   if(response.ok){const copy=response.clone();caches.open(CACHE).then(cache=>cache.put(request,copy));}
-   return response;
-  }).catch(()=>caches.match(request).then(r=>r||Response.error())));
-  return;
- }
- if(request.mode==='navigate'){
-  event.respondWith(fetch(request).then(response=>{
-   if(response.ok){const copy=response.clone();caches.open(CACHE).then(cache=>cache.put('./index.html',copy));}
-   return response;
-  }).catch(()=>caches.match('./index.html').then(r=>r||Response.error())));
+ // Online visits use fresh HTML, scripts and CSS; offline visits use the saved shell.
+ // Only known static app assets are cached, never authenticated API responses.
+ const navigation=request.mode==='navigate';
+ const staticCode=['script','style'].includes(request.destination)||/\.(?:js|css)$/.test(url.pathname);
+ if(navigation||staticCode){
+  const cacheKey=navigation?new URL('index.html',scope).href:request;
+  event.respondWith((async()=>{
+   const cache=await caches.open(CACHE);
+   try{
+    const response=await fetch(request,{cache:'no-store'});
+    if(response.ok&&response.type==='basic'){try{await cache.put(cacheKey,response.clone());}catch{}}
+    if(response.ok||response.status<500)return response;
+    return (await cache.match(cacheKey))||response;
+   }catch(error){return (await cache.match(cacheKey))||Response.error();}
+  })());
   return;
  }
  event.respondWith(caches.match(request).then(cached=>{
