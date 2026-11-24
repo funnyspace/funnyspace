@@ -65,3 +65,29 @@ body.billnest-auth-open{overflow:hidden}
 .billnest-auth-email-alternative{display:block;width:100%;margin-top:11px;padding:9px 12px;border:1px solid #d5dfdd;border-radius:9px;background:#fff;color:#086951;font-size:13px;font-weight:750;text-align:center;cursor:pointer}
 .billnest-auth-email-alternative:hover{background:#eef8f4}
 .billnest-auth-email-alternative:focus-visible{outline:3px solid #b9dfd4;outline-offset:2px}
+
+/* Navy theme for sign-in, registration, verification and My Account only. */
+.billnest-auth-panel{color-scheme:dark;background:#0b1f3a;color:#f8fafc;box-shadow:0 23px 65px #0006;border:1px solid #314762}
+.billnest-auth-title h2,.billnest-auth-form label{color:#f8fafc}
+.billnest-auth-title img{background:#e9f9f5;border-radius:10px;padding:4px;box-sizing:border-box}
+.billnest-auth-subtitle,.billnest-auth-note,.billnest-auth-resend-hint{color:#b9c9dd}
+.billnest-auth-close{color:#c7d5e7}
+.billnest-auth-close:hover{color:#fff}
+.billnest-auth-tabs{background:#142e4d}
+.billnest-auth-tabs button{color:#c5d5e8}
+.billnest-auth-tabs button[aria-selected=true]{background:#294765;color:#f8fafc;box-shadow:0 2px 7px #0003}
+.billnest-auth-form input{background:#142e4d;color:#f8fafc;border-color:#526985}
+.billnest-auth-form input::placeholder{color:#a9bed7}
+.billnest-auth-form input:focus-visible{border-color:#5eead4;outline:3px solid #5eead44d}
+.billnest-auth-form input:-webkit-autofill{-webkit-text-fill-color:#f8fafc;-webkit-box-shadow:0 0 0 1000px #142e4d inset;caret-color:#f8fafc}
+.billnest-auth-form [readonly]{background:#203a56;color:#d2e0ef}
+.billnest-auth-primary{background:#0f766e;color:#fff}
+.billnest-auth-primary:hover{background:#115e59}
+.billnest-auth-secondary,.billnest-auth-switch button{color:#99f6e4}
+.billnest-auth-switch button:hover{color:#ccfbf1}
+.billnest-auth-message{background:#123e39;color:#b9f6dc;border-color:#39786b}
+.billnest-auth-message.error{background:#492b39;color:#fecaca;border-color:#9f5663}
+.billnest-auth-user,.billnest-auth-setup{background:#142e4d;color:#f8fafc;border-color:#405b78}
+.billnest-auth-logout,.billnest-auth-email-alternative{background:#142e4d;color:#f8fafc;border-color:#526985}
+.billnest-auth-logout:hover,.billnest-auth-email-alternative:hover{background:#294765}
+.billnest-auth-panel button:focus-visible{outline:3px solid #99f6e4;outline-offset:2px}
