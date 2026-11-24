@@ -1,4 +1,4 @@
-/* BillNest Supabase shop database: opt-in staging UI, separate from local billing.
+/* BillNest Cloud shop database: opt-in staging UI, separate from local billing.
  * Requires versioned bn_* SQL migrations and an authenticated Supabase session.
  * Never sends service role keys or overwrites the existing browser workspace.
  */
@@ -25,7 +25,7 @@
  function settingsMarkup(){
    resetForAccount();
    const signed=Boolean(account());
-   const status=!cloud?.hasAuthConfig?.()?'Configure Supabase in Cloud backup first.':!signed?'Sign in to use your Supabase shop database.':!loaded?'Select Refresh cloud shops to check the database migration.':shops.length?'Cloud shops available. Existing browser invoices remain unchanged.':'No cloud shops found. Create one to start.';
+   const status=!cloud?.hasAuthConfig?.()?'Cloud service is currently unavailable. Contact BillNest support.':!signed?'Sign in to use your Supabase shop database.':!loaded?'Select Refresh cloud shops to check the database migration.':shops.length?'Cloud shops available. Existing browser invoices remain unchanged.':'No cloud shops found. Create one to start.';
    const active=shops.find(s=>s.id===selected);
    const canEdit=['owner','manager'].includes(roles.get(selected));
    return '<section class="card setting-section bn-database-panel" id="bnDatabasePanel" aria-label="Supabase shop database">'+
