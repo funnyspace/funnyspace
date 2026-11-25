@@ -9,4 +9,4 @@ window.BILLNEST_AUTH_CONFIG = {
 };
 
 /* Merchant receiving UPI ID. Set only to the verified BillNest merchant account. */
-window.BILLNEST_SUBSCRIPTION_UPI = '';
+window.BILLNEST_SUBSCRIPTION_UPI = '9631011998@ptsbi';
