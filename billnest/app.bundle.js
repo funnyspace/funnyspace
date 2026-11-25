@@ -1306,7 +1306,7 @@ function handleAction(action,id){switch(action){
  case 'remove-business-logo':pendingLogo='';paintLogoPreview();break;
  case 'backup':downloadFile(`billnest-backup-${today()}.json`,JSON.stringify(db,null,2),'application/json');toast('Backup downloaded.');break;
  case 'choose-import':$('#importFile')?.click();break;
- case 'reset-data':if(confirm('This will permanently clear all products, invoices, customers and settings saved in this browser. Have you downloaded a backup?')){db=emptyDb();if(save()){ui={...ui,page:'dashboard',modal:null,cart:[],billingCustomer:'',billingSearch:'',search:''};render();toast('Workspace cleared. Start by adding a product.')}}break;
+ case 'reset-data':if(confirm('This will permanently clear all products, invoices, customers and settings saved in this browser. Have you downloaded a backup?')){const previous=db;db=emptyDb();if(save()){ui={...ui,page:'dashboard',modal:null,cart:[],billingCustomer:'',billingSearch:'',search:''};render();toast('Workspace cleared. Start by adding a product.')}else{db=previous;}}break;
  }}
 function validateNonnegative(n,name,integer=false){if(!Number.isFinite(n)||n<0||integer&&!Number.isInteger(n))throw Error('Enter a valid '+name+'.')}
 function handleForm(form){const data=Object.fromEntries(new FormData(form));try{
