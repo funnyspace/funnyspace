@@ -42,12 +42,24 @@ function calculateInvoice(items, productMap, discountPercent = 0, settings = {},
   const discount = Math.min(100,Math.max(0,safeNum(discountPercent)));
   const inclusive = settings.taxMode === 'inclusive';
   const lines = [];
+  // Validate total requested quantity per product, not each cart row independently.
+  // Use integer grams for kg products and whole units for count-based products.
+  const grouped = new Map();
   for (const item of items) {
     const product = productMap[item.productId];
     if (!product) throw new Error('One of the products no longer exists.');
-    const qty = Number(item.qty);
     if (!validQty(item.qty,product.unit,true)) throw new Error('Invalid quantity for ' + product.name);
-    if (qty > product.stock) throw new Error(`Only ${product.stock} ${product.unit || 'units'} available for ${product.name}.`);
+    if (!validQty(product.stock,product.unit)) throw new Error('Invalid available stock for ' + product.name + '. Update inventory before billing.');
+    const scale = qtyScale(product.unit);
+    const previous = grouped.get(product.id);
+    const requested = (previous?.scaledQty || 0) + Math.round(Number(item.qty)*scale);
+    if (!Number.isSafeInteger(requested) || requested > Math.round(Number(product.stock)*scale))
+      throw new Error(`Only ${product.stock} ${product.unit || 'units'} available for ${product.name}. Requested total: ${requested/scale}.`);
+    grouped.set(product.id,{product,scaledQty:requested});
+  }
+  // Consolidation also prevents separate rounding of duplicate product rows.
+  for (const {product,scaledQty} of grouped.values()) {
+    const qty = scaledQty/qtyScale(product.unit);
     const unit = toPaise(product.price);
     if (unit < 0) throw new Error('Invalid price for ' + product.name);
     const rate = Math.max(0,safeNum(product.gst));
