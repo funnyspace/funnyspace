@@ -7,3 +7,6 @@ window.BILLNEST_AUTH_CONFIG = {
   url: 'https://lqtpimpgasxlqpiopeqc.supabase.co',
   key: 'sb_publishable_CkdlJORVbvWchvnfdilTqw_0MC0BJx2' // Public client-side key. Never substitute service_role, sb_secret_, or a DB password.
 };
+
+/* Merchant receiving UPI ID. Set only to the verified BillNest merchant account. */
+window.BILLNEST_SUBSCRIPTION_UPI = '';
