@@ -23,6 +23,21 @@ function expiryStatus(expiryDate, reference=today()) {
 }
 
 const safeNum = (v, fallback = 0) => Number.isFinite(Number(v)) ? Number(v) : fallback;
+// Kilogram quantities are stored in kg with at most three decimal places; math uses integer grams.
+const isKg = unit => /^(kg|kgs|kilogram|kilograms|किग्रा)$/i.test(String(unit||'').trim());
+const canonicalUnit = unit => isKg(unit)?'kg':String(unit||'').trim()||'pcs';
+const qtyScale = unit => isKg(unit)?1000:1;
+const qtyStep = unit => isKg(unit)?0.001:1;
+const qtyLimit = 2147483647;
+const validQty = (value,unit,positive=false) => {
+ const scale=qtyScale(unit),n=Number(value),scaled=n*scale;
+ return value!==''&&value!==null&&value!==undefined&&Number.isFinite(n)&&n>=0&&n<=qtyLimit&&(!positive||n>0)&&Number.isSafeInteger(Math.round(scaled))&&Math.abs(scaled-Math.round(scaled))<0.000001;
+};
+const roundQty = (n,unit) => Math.round(n*qtyScale(unit))/qtyScale(unit);
+const addQty = (a,b,unit) => (Math.round(a*qtyScale(unit))+Math.round(b*qtyScale(unit)))/qtyScale(unit);
+const quantityMoney = (paise,qty,unit) => Math.round(paise*Math.round(qty*qtyScale(unit))/qtyScale(unit));
+const firstCartQty = p => Math.min(1,p.stock);
+const cartIncrement = (p,qty,step=1) => {const next=addQty(validQty(qty,p.unit)?qty:0,step,p.unit);return next<=p.stock?next:null;};
 function calculateInvoice(items, productMap, discountPercent = 0, settings = {}, customer = {}) {
   const discount = Math.min(100,Math.max(0,safeNum(discountPercent)));
   const inclusive = settings.taxMode === 'inclusive';
@@ -31,19 +46,20 @@ function calculateInvoice(items, productMap, discountPercent = 0, settings = {},
     const product = productMap[item.productId];
     if (!product) throw new Error('One of the products no longer exists.');
     const qty = Number(item.qty);
-    if (!Number.isInteger(qty) || qty <= 0) throw new Error('Invalid quantity for ' + product.name);
+    if (!validQty(item.qty,product.unit,true)) throw new Error('Invalid quantity for ' + product.name);
     if (qty > product.stock) throw new Error(`Only ${product.stock} ${product.unit || 'units'} available for ${product.name}.`);
     const unit = toPaise(product.price);
     if (unit < 0) throw new Error('Invalid price for ' + product.name);
     const rate = Math.max(0,safeNum(product.gst));
-    const original = unit * qty;
+    const original = quantityMoney(unit,qty,product.unit);
+    if(!Number.isSafeInteger(original))throw Error('Invoice amount exceeds the supported limit.');
     const discounted = Math.round(original * (100 - discount) / 100);
     const taxable = inclusive ? Math.round(discounted * 100 / (100 + rate)) : discounted;
     const tax = inclusive ? discounted - taxable : Math.round(taxable * rate / 100);
     const total = inclusive ? discounted : taxable + tax;
     // Snapshot purchase cost so later price/cost edits do not rewrite past profits.
     const unitCost = toPaise(Math.max(0,safeNum(product.cost)));
-    lines.push({productId:product.id,sku:product.sku,name:product.name,unit:product.unit || 'pcs',qty,unitPrice:unit,unitCost,costTotal:unitCost*qty,gst:rate,original,discount:original-discounted,taxable,tax,total});
+    lines.push({productId:product.id,sku:product.sku,name:product.name,unit:product.unit || 'pcs',qty,unitPrice:unit,unitCost,costTotal:quantityMoney(unitCost,qty,product.unit),gst:rate,original,discount:original-discounted,taxable,tax,total});
   }
   const totals = lines.reduce((a,l) => ({list:a.list+l.original,discount:a.discount+l.discount,taxable:a.taxable+l.taxable,tax:a.tax+l.tax,total:a.total+l.total}), {list:0,discount:0,taxable:0,tax:0,total:0});
   const source = (settings.state || '').toLowerCase().trim();
@@ -89,13 +105,13 @@ function summarizeProfit(invoices,products=[],start='0001-01-01') {
       const row=rows.get(id)||{productId:id,name:String(line.name||'Unknown product'),sku:String(line.sku||''),qty:0,sales:0,recognizedSales:0,cost:0,profit:0,estimatedLines:0,missingCostLines:0};
       if (!rows.has(id))rows.set(id,row);
       const taxable=Number.isFinite(Number(line.taxable))?Math.round(Number(line.taxable)):0;
-      row.qty+=qty;row.sales+=taxable;sales+=taxable;units+=qty;
+      row.qty=Math.round((row.qty+qty)*1000)/1000;row.sales+=taxable;sales+=taxable;units=Math.round((units+qty)*1000)/1000;
       let lineCost;
       const validCost = v => typeof v==='number' && Number.isSafeInteger(v) && v>=0;
       if (validCost(line.costTotal))lineCost=line.costTotal;
       else if (validCost(line.unitCost))lineCost=Math.round(line.unitCost*qty);
       else if (product && Number.isFinite(Number(product.cost)) && Number(product.cost)>=0) {
-        lineCost=toPaise(product.cost)*qty;
+        lineCost=Math.round(toPaise(product.cost)*qty);
         row.estimatedLines++;estimatedLines++;
       } else {
         row.missingCostLines++;missingCostLines++;continue;
@@ -551,8 +567,9 @@ function barcodeFound(raw,explicit=false){
  }
  if(product){
   const current=ui.cart.find(line=>line.productId===product.id);
-  if(product.stock<=0||(current&&current.qty>=product.stock)){scannerStatus(`${product.name} has no more available stock.`,'error');return}
-  if(current)current.qty++;else ui.cart.push({productId:product.id,qty:1});
+  const next=current?cartIncrement(product,current.qty):firstCartQty(product);
+  if(product.stock<=0||next===null){scannerStatus(`${product.name} has no more available stock.`,'error');return}
+  if(current)current.qty=next;else ui.cart.push({productId:product.id,qty:next});
   scannerStatus(`✓ ${product.name} added to bill. Move the barcode away before scanning it again.`,'success');
   if(navigator.vibrate)navigator.vibrate(65);
   render();return;
@@ -994,7 +1011,7 @@ function renderProfitReport(){
  const query=ui.profitSearch.toLowerCase().trim();
  const visible=stat.productRows.filter(p=>!query||[p.name,p.sku].some(v=>v.toLowerCase().includes(query)));
  const page=pagedRows('profit',visible);
- const number=(v)=>Math.round(v).toLocaleString('en-IN');
+ const number=(v)=>Number(v).toLocaleString('en-IN',{maximumFractionDigits:3});
  const cards=[
   ['Net sales (excl. GST)',money(stat.sales),'After invoice discounts','neutral'],
   ['Cost of goods sold',money(stat.cost),'Cost of sold products','neutral'],
@@ -1028,7 +1045,7 @@ function renderDashboard(){
  <div class="grid metric-grid">${metrics.map(([name,value,subtitle,icon,color])=>`<div class="card metric-card"><div class="metric-top">${name}<span class="metric-icon icon-3d ${color}">${icon3D(icon)}</span></div><div class="metric-value">${value}</div><div class="metric-sub">${subtitle}</div></div>`).join('')}</div>
  ${renderAccountingShortcut()}
  <div class="section-grid"><section class="card section-card"><div class="section-title"><h3>Sales overview</h3><span class="muted small">Last 7 days</span></div><div class="chart-wrap">${points.map((value,i)=>`<div class="chart-col"><div class="chart-bars"><div class="chart-bar" style="height:${Math.max(2,Math.round(value/max*100))}%" title="${e(days[i])}: ${money(value)}"></div></div><div class="chart-label">${dateFromDay(days[i]).toLocaleDateString('en-IN',{weekday:'short'})}</div></div>`).join('')}</div><p class="mini-note">Daily invoice totals in Indian rupees</p></section>
- <section class="card section-card"><div class="section-title"><h3>Stock &amp; expiry alerts</h3><button class="section-link" data-go="inventory">View inventory →</button></div>${expiring.length?`<div class="expiry-overview"><strong>${expiring.filter(p=>productExpiryStatus(p).state==='expired').length} expired · ${expiring.filter(p=>productExpiryStatus(p).state==='soon').length} expiring within 30 days</strong><button class="section-link" data-go="inventory" data-filter-jump="expiring">Review expiry →</button></div><div class="alert-list expiry-alert-list">${expiring.slice(0,4).map(p=>`<div class="alert-row expiry-alert-row"><span class="alert-icon expiry-alert-icon">${icon3D('expiry')}</span><div class="alert-details"><b>${e(p.name)}</b><small>Expiry ${formatDate(p.expiryDate)} · ${p.stock} in stock</small></div><span class="chip ${productExpiryStatus(p).state==='expired'?'red':'yellow'}">${e(expiryLabel(p))}</span></div>`).join('')}</div>${expiring.length>4?`<p class="mini-note">+${expiring.length-4} more expiry alerts</p>`:''}`:'<p class="mini-note expiry-empty-note">Set an expiry date on a product to receive alerts 30 days before expiry.</p>'}${low.length?`<div class="alert-list">${low.slice(0,4).map(p=>`<div class="alert-row"><div class="alert-icon">⚠</div><div class="alert-details"><b>${e(p.name)}</b><small>${e(p.sku)} · Reorder at ${p.lowStock}</small></div><span class="chip ${p.stock===0?'red':'yellow'}">${p.stock} left</span></div>`).join('')}</div>${low.length>4?`<p class="mini-note">+${low.length-4} more products need attention</p>`:''}`:empty('✓','All stocked up','No products have reached their low-stock threshold.')}</section></div>
+ <section class="card section-card"><div class="section-title"><h3>Stock &amp; expiry alerts</h3><button class="section-link" data-go="inventory">View inventory →</button></div>${expiring.length?`<div class="expiry-overview"><strong>${expiring.filter(p=>productExpiryStatus(p).state==='expired').length} expired · ${expiring.filter(p=>productExpiryStatus(p).state==='soon').length} expiring within 30 days</strong><button class="section-link" data-go="inventory" data-filter-jump="expiring">Review expiry →</button></div><div class="alert-list expiry-alert-list">${expiring.slice(0,4).map(p=>`<div class="alert-row expiry-alert-row"><span class="alert-icon expiry-alert-icon">${icon3D('expiry')}</span><div class="alert-details"><b>${e(p.name)}</b><small>Expiry ${formatDate(p.expiryDate)} · ${p.stock} ${e(p.unit)} in stock</small></div><span class="chip ${productExpiryStatus(p).state==='expired'?'red':'yellow'}">${e(expiryLabel(p))}</span></div>`).join('')}</div>${expiring.length>4?`<p class="mini-note">+${expiring.length-4} more expiry alerts</p>`:''}`:'<p class="mini-note expiry-empty-note">Set an expiry date on a product to receive alerts 30 days before expiry.</p>'}${low.length?`<div class="alert-list">${low.slice(0,4).map(p=>`<div class="alert-row"><div class="alert-icon">⚠</div><div class="alert-details"><b>${e(p.name)}</b><small>${e(p.sku)} · Reorder at ${p.lowStock}</small></div><span class="chip ${p.stock===0?'red':'yellow'}">${p.stock} left</span></div>`).join('')}</div>${low.length>4?`<p class="mini-note">+${low.length-4} more products need attention</p>`:''}`:empty('✓','All stocked up','No products have reached their low-stock threshold.')}</section></div>
  <section class="card recent-card"><div class="section-title" style="padding:20px 22px 0;margin-bottom:8px"><h3>Recent invoices</h3><button class="section-link" data-go="sales">View all →</button></div>${recent.length?`<div class="table-scroll"><table class="data-table"><thead><tr><th>Invoice</th><th>Customer</th><th>Date</th><th>Payment</th><th>Amount</th><th></th></tr></thead><tbody>${recent.map(x=>`<tr><td><strong>${e(x.number)}</strong></td><td>${e(x.customer?.name||'Walk-in customer')}</td><td>${formatDate(x.date)}</td><td><span class="chip ${x.paid?'green':'yellow'}">${x.paid?'Paid':'Unpaid'}</span></td><td><strong>${money(x.total)}</strong></td><td><button class="btn btn-sm" data-action="view-invoice" data-id="${x.id}">View</button></td></tr>`).join('')}</tbody></table></div>`:empty('▧','No invoices yet','Start by creating your first invoice.','Create invoice','new-bill')}</section>`;
 }
 function renderInventory(){
@@ -1045,10 +1062,10 @@ function renderBilling(){
  if(chosen&&!customerOptions.some(c=>c.id===chosen.id))customerOptions.unshift(chosen);
  const preview=billingPreview();
  return `${sectionHeader('Billing & checkout','Select products, set quantities and create a printable invoice.',`<button class="btn btn-scan" data-action="scan-billing">▣ Scan barcode</button><button class="btn" data-go="sales">Invoice history</button>`)}
- <div class="two-col"><section class="card products-picker"><div class="table-top"><div><strong style="font-size:14px">Select products</strong><div class="mini-note">Click a product to add it to the invoice</div></div></div><div style="padding:13px 17px"><div class="billing-search-row"><div class="searchbox" style="max-width:none"><input type="search" data-search="billing" value="${e(ui.billingSearch)}" placeholder="Search name, SKU or barcode..." aria-label="Find product"></div><button type="button" class="btn btn-scan mobile-scan-btn" data-action="scan-billing">▣ Scan</button></div></div><div class="picker-list">${matching.length?page.visible.map((p,i)=>`<button class="picker-product" data-action="add-to-cart" data-id="${p.id}" ${p.stock===0?'disabled':''}>${productAvatar(p,i)}<span class="picker-info"><strong>${e(p.name)}</strong><small>${e(p.sku)} · ${p.stock>0?`${p.stock} in stock`:'Out of stock'}</small></span><span class="picker-price">${money(toPaise(p.price))}</span><span class="picker-add">+</span></button>`).join(''):db.products.length?empty('⌕','No matching products','Try searching with a different keyword.'):empty('▧','No products to bill yet','Add your first product to start billing.','Add product','add-product')}</div>${page.controls}</section>
- <section class="card bill-card"><div style="display:flex;justify-content:space-between;gap:12px;align-items:center"><h3>Current invoice</h3><span class="chip grey">${ui.cart.reduce((a,b)=>a+b.qty,0)} items</span></div><div class="field"><label for="billCustomer">Customer</label><input id="billCustomerSearch" type="search" autocomplete="off" value="${e(ui.billingCustomerSearch)}" placeholder="Search customer by name, phone or email..." aria-label="Find billing customer"><select id="billCustomer"><option value="">Walk-in customer</option>${customerOptions.map(c=>`<option value="${c.id}" ${ui.billingCustomer===c.id?'selected':''}>${e(c.name)}</option>`).join('')}</select></div><div style="display:flex;justify-content:flex-end;margin-top:6px"><button class="section-link" data-action="add-customer">+ Add customer</button></div>
- <div class="bill-items">${ui.cart.length?ui.cart.map(item=>{const p=db.products.find(p=>p.id===item.productId);if(!p)return '';const line=preview?.lines.find(l=>l.productId===p.id);return `<div class="bill-item"><div><div class="name">${e(p.name)}</div><small>${money(toPaise(p.price))} / ${e(p.unit)}</small><div class="qty-control"><button data-action="decrease-qty" data-id="${p.id}" aria-label="Decrease quantity">−</button><span>${item.qty}</span><button data-action="increase-qty" data-id="${p.id}" aria-label="Increase quantity" ${item.qty>=p.stock?'disabled':''}>+</button></div></div><div><div class="bill-line-total">${money(line?.total ?? toPaise(p.price)*item.qty)}</div><button class="remove-item" data-action="remove-cart" data-id="${p.id}">Remove</button></div></div>`}).join(''):empty('▧','Your cart is empty','Choose a product on the left to begin billing.')}</div>
- <div class="field"><label for="billDiscount">Discount (%)</label><input id="billDiscount" type="number" min="0" max="100" step="0.5" value="${e(ui.discount)}"></div><div class="summary-box"><div class="summary-row"><span>Subtotal ${db.settings.taxMode==='inclusive'?'(incl. GST)':''}</span><b>${money(preview?.list||0)}</b></div><div class="summary-row"><span>Discount</span><b>− ${money(preview?.discount||0)}</b></div><div class="summary-row"><span>GST ${preview?.taxType==='intra'?'(CGST + SGST)':preview?.taxType==='inter'?'(IGST)':''} ${db.settings.taxMode==='inclusive'?'included':''}</span><b>${money(preview?.tax||0)}</b></div><div class="summary-row total"><span>Total</span><b>${money(preview?.total||0)}</b></div></div>
+ <div class="two-col"><section class="card products-picker"><div class="table-top"><div><strong style="font-size:14px">Select products</strong><div class="mini-note">Click a product to add it to the invoice</div></div></div><div style="padding:13px 17px"><div class="billing-search-row"><div class="searchbox" style="max-width:none"><input type="search" data-search="billing" value="${e(ui.billingSearch)}" placeholder="Search name, SKU or barcode..." aria-label="Find product"></div><button type="button" class="btn btn-scan mobile-scan-btn" data-action="scan-billing">▣ Scan</button></div></div><div class="picker-list">${matching.length?page.visible.map((p,i)=>`<button class="picker-product" data-action="add-to-cart" data-id="${p.id}" ${p.stock===0?'disabled':''}>${productAvatar(p,i)}<span class="picker-info"><strong>${e(p.name)}</strong><small>${e(p.sku)} · ${p.stock>0?`${p.stock} in stock`:'Out of stock'}</small></span><span class="picker-price">${money(toPaise(p.price))}${isKg(p.unit)?' / kg':''}</span><span class="picker-add">+</span></button>`).join(''):db.products.length?empty('⌕','No matching products','Try searching with a different keyword.'):empty('▧','No products to bill yet','Add your first product to start billing.','Add product','add-product')}</div>${page.controls}</section>
+ <section class="card bill-card"><div style="display:flex;justify-content:space-between;gap:12px;align-items:center"><h3>Current invoice</h3><span class="chip grey">${ui.cart.length} items</span></div><div class="field"><label for="billCustomer">Customer</label><input id="billCustomerSearch" type="search" autocomplete="off" value="${e(ui.billingCustomerSearch)}" placeholder="Search customer by name, phone or email..." aria-label="Find billing customer"><select id="billCustomer"><option value="">Walk-in customer</option>${customerOptions.map(c=>`<option value="${c.id}" ${ui.billingCustomer===c.id?'selected':''}>${e(c.name)}</option>`).join('')}</select></div><div style="display:flex;justify-content:flex-end;margin-top:6px"><button class="section-link" data-action="add-customer">+ Add customer</button></div>
+ <div class="bill-items">${ui.cart.length?ui.cart.map(item=>{const p=db.products.find(p=>p.id===item.productId);if(!p)return '';const line=preview?.lines.find(l=>l.productId===p.id);return `<div class="bill-item"><div><div class="name">${e(p.name)}</div><small>${money(toPaise(p.price))} / ${e(p.unit)}</small><div class="qty-control"><button data-action="decrease-qty" data-id="${p.id}" aria-label="Decrease quantity">−</button>${isKg(p.unit)?`<input class="bill-kg-input" data-bill-qty="${e(p.id)}" type="number" inputmode="decimal" min="0.001" step="0.001" max="${p.stock}" value="${Number.isFinite(item.qty)?item.qty:'' }" aria-label="Quantity in kilograms for ${e(p.name)}"><span class="bill-kg-unit">kg</span>`:`<span>${item.qty}</span>`}<button data-action="increase-qty" data-id="${p.id}" aria-label="Increase quantity" ${cartIncrement(p,item.qty,isKg(p.unit)?0.1:1)===null?'disabled':''}>+</button></div></div><div><div class="bill-line-total" data-bill-line="${e(p.id)}">${line?money(line.total):'Invalid quantity'}</div><button class="remove-item" data-action="remove-cart" data-id="${p.id}">Remove</button></div></div>`}).join(''):empty('▧','Your cart is empty','Choose a product on the left to begin billing.')}</div>
+ <div class="field"><label for="billDiscount">Discount (%)</label><input id="billDiscount" type="number" min="0" max="100" step="0.5" value="${e(ui.discount)}"></div><div class="summary-box"><div class="summary-row"><span>Subtotal ${db.settings.taxMode==='inclusive'?'(incl. GST)':''}</span><b data-bill-total="list">${money(preview?.list||0)}</b></div><div class="summary-row"><span>Discount</span><b data-bill-total="discount">− ${money(preview?.discount||0)}</b></div><div class="summary-row"><span>GST ${preview?.taxType==='intra'?'(CGST + SGST)':preview?.taxType==='inter'?'(IGST)':''} ${db.settings.taxMode==='inclusive'?'included':''}</span><b data-bill-total="tax">${money(preview?.tax||0)}</b></div><div class="summary-row total"><span>Total</span><b data-bill-total="total">${money(preview?.total||0)}</b></div></div>
  <div class="form-grid" style="margin-bottom:14px"><div class="field"><label for="billPayment">Payment method</label><select id="billPayment">${['Cash','UPI','Card','Bank transfer','Credit'].map(x=>`<option ${ui.payment===x?'selected':''}>${x}</option>`).join('')}</select></div><div class="field"><label for="billNotes">Reference / notes</label><input id="billNotes" placeholder="Optional" value="${e(ui.billNotes)}" maxlength="140"></div></div>
  ${ui.payment==='UPI'?`<p class="upi-billing-hint">${isValidUpiId(db.settings.upiId)?`UPI QR for <b>${e(db.settings.upiId)}</b> will appear after invoice creation. Confirm receipt before marking paid.`:`Set a receiving UPI ID in <button class="section-link" type="button" data-go="settings">Store Settings</button> first.`}</p>`:''}
  <button class="btn btn-primary btn-block btn-lg" data-action="save-invoice" ${!ui.cart.length||!preview?'disabled':''}>✓ Generate invoice · ${money(preview?.total||0)}</button><p class="mini-note" style="text-align:center">Stock is deducted when you generate the invoice.</p></section></div>`;
@@ -1096,14 +1113,14 @@ function renderAccounting(){
 function reorderProducts(products=db.products){
  return products.filter(p=>p.stock<=p.lowStock).sort((a,b)=>(Number(b.stock===0)-Number(a.stock===0))||(a.stock-b.stock)||String(a.name).localeCompare(String(b.name)));
 }
-const reorderQuantity = p => Math.max(1,Number(p.lowStock)+1-Number(p.stock));
+const reorderQuantity = p => Math.max(qtyStep(p.unit),addQty(addQty(Number(p.lowStock),qtyStep(p.unit),p.unit),-Number(p.stock),p.unit));
 function renderReorderReport(){
  const items=reorderProducts(),page=pagedRows('reorder',items),out=items.filter(p=>p.stock===0).length;
  return `<section class="card section-card reorder-report"><div class="reorder-header"><div><h3>Low stock &amp; refill</h3><p class="mini-note">Current inventory at or below its low-stock alert level, regardless of report dates.</p></div><button type="button" class="btn btn-sm" data-action="export-reorder" ${items.length?'':'disabled'}>↓ Export reorder list</button></div><div class="reorder-summary"><span class="chip yellow">${items.length} need reorder</span><span class="chip red">${out} out of stock</span></div>${items.length?`<p class="mini-note">Suggested refill is the minimum quantity needed to move above the alert level. Select Refill stock to record goods you have actually received.</p><div class="table-scroll"><table class="data-table reorder-table"><thead><tr><th>Product</th><th>In stock</th><th>Alert level</th><th>Suggested refill</th><th>Status</th><th>Action</th></tr></thead><tbody>${page.visible.map((p,i)=>`<tr><td><div class="product-cell">${productAvatar(p,i)}<div><strong>${e(p.name)}</strong><small>${e(p.sku)}</small></div></div></td><td>${p.stock} ${e(p.unit)}</td><td>${p.lowStock}</td><td><strong>${reorderQuantity(p)} ${e(p.unit)}</strong></td><td>${productStatus(p)}</td><td><button type="button" class="btn btn-sm btn-primary refill-action" data-action="refill-stock" data-id="${e(p.id)}">+ Refill stock</button></td></tr>`).join('')}</tbody></table></div>${page.controls}`:empty('✓','No products need reordering','All products are above their low-stock alert levels.')}</section>`;
 }
 function renderReports(){const start=reportDateRange(),inv=db.invoices.filter(x=>x.date>=start),sales=inv.reduce((s,i)=>s+i.total,0),tax=inv.reduce((s,i)=>s+i.tax,0),count=inv.length,avg=count?Math.round(sales/count):0;
  const payments={};inv.forEach(i=>{payments[i.payment]=(payments[i.payment]||0)+i.total});
- const prod={}; inv.forEach(i=>i.lines.forEach(line=>{const item=prod[line.name] ||= {name:line.name,qty:0,total:0};item.qty+=line.qty;item.total+=line.total}));const best=Object.values(prod).sort((a,b)=>b.qty-a.qty).slice(0,6);const topSales=Math.max(...Object.values(payments),1),topQty=Math.max(...best.map(i=>i.qty),1);
+ const prod={}; inv.forEach(i=>i.lines.forEach(line=>{const item=prod[line.name] ||= {name:line.name,qty:0,total:0};item.qty=Math.round((item.qty+line.qty)*1000)/1000;item.total+=line.total}));const best=Object.values(prod).sort((a,b)=>b.qty-a.qty).slice(0,6);const topSales=Math.max(...Object.values(payments),1),topQty=Math.max(...best.map(i=>i.qty),1);
  return `${sectionHeader('Business reports','Simple insights to help you make decisions.',`<select class="select-input" id="reportRange" aria-label="Date range"><option value="7" ${ui.reportRange==='7'?'selected':''}>Last 7 days</option><option value="30" ${ui.reportRange==='30'?'selected':''}>Last 30 days</option><option value="90" ${ui.reportRange==='90'?'selected':''}>Last 90 days</option><option value="all" ${ui.reportRange==='all'?'selected':''}>All time</option></select><button class="btn" data-action="export-invoices">↓ Export sales</button>`)}<div class="grid report-grid">${[['Total sales',money(sales)],['Invoices issued',count],['GST on sales',money(tax)],['Average invoice',money(avg)],['Unpaid invoices',inv.filter(i=>!i.paid).length],['Inventory at cost',money(db.products.reduce((s,p)=>s+toPaise(p.cost)*p.stock,0))]].map(([label,value])=>`<div class="card report-card"><div class="overline">${label}</div><div class="metric-value">${value}</div></div>`).join('')}</div>
  ${renderReorderReport()}
  ${renderProfitReport()}
@@ -1116,7 +1133,7 @@ function shellModal(title,desc,body,footer='',cls=''){return `<div class="modal-
 function renderModal(){let h='';
  if(ui.modal==='product'){
   const p=db.products.find(x=>x.id===ui.editId)||{};const editing=Boolean(p.id);const newCode=editing?(p.barcode||''):ui.scanCode;
-  h=shellModal(editing?'Edit product':'Add a product',editing?'Update product information.':'Enter the details for your new product.',`<form id="productForm"><div class="modal-body"><div class="form-grid">${field('Product name *','name',p.name||'','text','required maxlength="100"')}${field('SKU / item code *','sku',p.sku||(newCode||'').slice(0,40),'text','required maxlength="40"')}${field('Barcode / EAN / UPC','barcode',newCode,'text','maxlength="80" autocomplete="off"')}<div class="field full scan-in-form"><button type="button" class="btn btn-scan" data-action="scan-product-field">▣ Scan barcode with camera</button><span class="field-hint">Barcode identifies the item. Enter its name, prices and GST manually.</span></div>${field('Category','category',p.category||'','text','maxlength="40"')}${field('Unit','unit',p.unit||'pcs','text','required maxlength="16"')}${field('Selling price (₹) *','price',p.price??'','number','required min="0" step="0.01"')}${field('Purchase cost (₹)','cost',p.cost??'','number','min="0" step="0.01"')}${field('Opening stock','stock',p.stock??0,'number',`required min="0" step="1" ${editing?'readonly title="Use Stock button to update inventory"':''}`)}${field('Low stock alert at','lowStock',p.lowStock??5,'number','required min="0" step="1"')}${field('Expiry date (optional)','expiryDate',p.expiryDate||'','date')}<div class="field full expiry-form-note"><span class="field-hint">Receive a warning 30 days before expiry. Each product currently supports one expiry date.</span></div><div class="field full"><label for="gst">GST rate (%)</label><input id="gst" name="gst" type="number" required min="0" max="100" step="0.01" value="${e(p.gst??18)}"><span class="field-hint">Common rates include 0%, 5%, 18% and 40%. Check the applicable rate for each product.</span></div></div>${editing?`<p class="field-hint" style="margin:13px 0 0">Use “+ Stock” on the inventory page to change stock and record a movement.</p>`:''}</div><div class="modal-footer">${editing?'<button type="button" class="btn btn-danger" data-action="delete-product">Delete product</button>':''}<span style="flex:1"></span><button type="button" class="btn" data-action="close-modal">Cancel</button><button class="btn btn-primary" type="submit">${editing?'Save changes':'Add product'}</button></div></form>`);
+  h=shellModal(editing?'Edit product':'Add a product',editing?'Update product information.':'Enter the details for your new product.',`<form id="productForm"><div class="modal-body"><div class="form-grid">${field('Product name *','name',p.name||'','text','required maxlength="100"')}${field('SKU / item code *','sku',p.sku||(newCode||'').slice(0,40),'text','required maxlength="40"')}${field('Barcode / EAN / UPC','barcode',newCode,'text','maxlength="80" autocomplete="off"')}<div class="field full scan-in-form"><button type="button" class="btn btn-scan" data-action="scan-product-field">▣ Scan barcode with camera</button><span class="field-hint">Barcode identifies the item. Enter its name, prices and GST manually.</span></div>${field('Category','category',p.category||'','text','maxlength="40"')}${field('Unit','unit',canonicalUnit(p.unit),'text','required maxlength="16" list="productUnits"')}<datalist id="productUnits"><option value="pcs">Pieces</option><option value="kg">Kilogram</option><option value="g">Gram</option><option value="l">Litre</option><option value="pack">Pack</option></datalist>${field(isKg(p.unit)?'Selling price per kg (₹) *':'Selling price per unit (₹) *','price',p.price??'','number','required min="0" step="0.01"')}${field(isKg(p.unit)?'Purchase cost per kg (₹)':'Purchase cost per unit (₹)','cost',p.cost??'','number','min="0" step="0.01"')}${field('Opening stock','stock',p.stock??0,'number',`required min="0" max="${qtyLimit}" step="${qtyStep(p.unit)}" ${editing?'readonly title="Use Stock button to update inventory"':''}`)}${field('Low stock alert at','lowStock',p.lowStock??5,'number',`required min="0" max="${qtyLimit}" step="${qtyStep(p.unit)}"`)}${field('Expiry date (optional)','expiryDate',p.expiryDate||'','date')}<div class="field full expiry-form-note"><span class="field-hint">Receive a warning 30 days before expiry. Each product currently supports one expiry date.</span></div><div class="field full"><label for="gst">GST rate (%)</label><input id="gst" name="gst" type="number" required min="0" max="100" step="0.01" value="${e(p.gst??18)}"><span class="field-hint">Common rates include 0%, 5%, 18% and 40%. Check the applicable rate for each product.</span></div></div>${editing?`<p class="field-hint" style="margin:13px 0 0">Use “+ Stock” on the inventory page to change stock and record a movement.</p>`:''}</div><div class="modal-footer">${editing?'<button type="button" class="btn btn-danger" data-action="delete-product">Delete product</button>':''}<span style="flex:1"></span><button type="button" class="btn" data-action="close-modal">Cancel</button><button class="btn btn-primary" type="submit">${editing?'Save changes':'Add product'}</button></div></form>`);
  }
  if(ui.modal==='customer'){
  const c=db.customers.find(x=>x.id===ui.editId)||{};const editing=Boolean(c.id);
@@ -1125,11 +1142,11 @@ function renderModal(){let h='';
  if(ui.modal==='refill'){
   const p=db.products.find(x=>x.id===ui.editId);if(!p)return closeModal();
   const suggested=reorderQuantity(p);
-  h=shellModal('Refill stock',e(p.name)+' · '+e(p.sku||''),`<form id="refillForm"><div class="modal-body"><div class="refill-metrics"><div><span>Current stock</span><strong>${p.stock} ${e(p.unit)}</strong></div><div><span>Alert level</span><strong>${p.lowStock}</strong></div><div><span>Suggested refill</span><strong>${suggested} ${e(p.unit)}</strong></div></div><p class="mini-note">Enter the quantity actually received. Change the suggested amount if needed.</p><div class="field"><label for="refillQty">Received quantity *</label><input id="refillQty" name="quantity" type="number" min="1" max="2147483647" step="1" required value="${suggested}"></div><p class="refill-result" id="refillResult" data-current="${p.stock}" data-unit="${e(p.unit)}" aria-live="polite">Stock after refill: ${p.stock+suggested} ${e(p.unit)}</p><div class="field"><label for="refillReason">Note (optional)</label><input id="refillReason" name="reason" maxlength="120" placeholder="Supplier delivery or purchase reference"></div></div><div class="modal-footer"><button type="button" class="btn" data-action="close-modal">Cancel</button><button class="btn btn-primary" type="submit">Confirm refill</button></div></form>`,'','small-modal');
+  h=shellModal('Refill stock',e(p.name)+' · '+e(p.sku||''),`<form id="refillForm"><div class="modal-body"><div class="refill-metrics"><div><span>Current stock</span><strong>${p.stock} ${e(p.unit)}</strong></div><div><span>Alert level</span><strong>${p.lowStock}</strong></div><div><span>Suggested refill</span><strong>${suggested} ${e(p.unit)}</strong></div></div><p class="mini-note">Enter the quantity actually received. Change the suggested amount if needed.</p><div class="field"><label for="refillQty">Received quantity *</label><input id="refillQty" name="quantity" type="number" min="${qtyStep(p.unit)}" max="${qtyLimit}" step="${qtyStep(p.unit)}" required value="${suggested}"></div><p class="refill-result" id="refillResult" data-current="${p.stock}" data-unit="${e(p.unit)}" aria-live="polite">Stock after refill: ${addQty(p.stock,suggested,p.unit)} ${e(p.unit)}</p><div class="field"><label for="refillReason">Note (optional)</label><input id="refillReason" name="reason" maxlength="120" placeholder="Supplier delivery or purchase reference"></div></div><div class="modal-footer"><button type="button" class="btn" data-action="close-modal">Cancel</button><button class="btn btn-primary" type="submit">Confirm refill</button></div></form>`,'','small-modal');
  }
  if(ui.modal==='stock'){
  const p=db.products.find(x=>x.id===ui.editId);if(!p)return closeModal();
- h=shellModal('Update stock',`${p.name} · Current quantity ${p.stock}`,`<form id="stockForm"><div class="modal-body"><div class="field"><label for="stockMode">Stock update</label><select id="stockMode" name="mode"><option value="add">Stock received (+)</option><option value="set">Set exact available stock</option></select></div><div class="field" style="margin-top:14px"><label for="stockQty">Quantity *</label><input id="stockQty" name="quantity" type="number" min="0" step="1" required placeholder="Enter quantity"></div><div class="field" style="margin-top:14px"><label for="stockReason">Note (optional)</label><input id="stockReason" name="reason" maxlength="120" placeholder="Supplier delivery, stock count, damage..."></div></div><div class="modal-footer"><button type="button" class="btn" data-action="close-modal">Cancel</button><button class="btn btn-primary" type="submit">Update stock</button></div></form>`,'','small-modal');
+ h=shellModal('Update stock',`${p.name} · Current quantity ${p.stock}`,`<form id="stockForm"><div class="modal-body"><div class="field"><label for="stockMode">Stock update</label><select id="stockMode" name="mode"><option value="add">Stock received (+)</option><option value="set">Set exact available stock</option></select></div><div class="field" style="margin-top:14px"><label for="stockQty">Quantity *</label><input id="stockQty" name="quantity" type="number" min="0" max="${qtyLimit}" step="${qtyStep(p.unit)}" required placeholder="Enter quantity"></div><div class="field" style="margin-top:14px"><label for="stockReason">Note (optional)</label><input id="stockReason" name="reason" maxlength="120" placeholder="Supplier delivery, stock count, damage..."></div></div><div class="modal-footer"><button type="button" class="btn" data-action="close-modal">Cancel</button><button class="btn btn-primary" type="submit">Update stock</button></div></form>`,'','small-modal');
  }
  if(ui.modal==='accounting'){
   const type=Object.keys(ACCOUNT_TYPES).filter(type=>type!=='customer-receipt');
@@ -1217,7 +1234,7 @@ function saveInvoice(){
  try{summary=calculateInvoice(ui.cart,productsMap(),ui.discount,db.settings,customer)}catch(err){return toast(err.message,'error')}
  const invoice={id:uid(),number:`${db.settings.invoicePrefix}-${String(db.settings.nextInvoice).padStart(4,'0')}`,date:today(),createdAt:new Date().toISOString(),customer:{...customer},business:{...db.settings},payment:ui.payment,paid:ui.payment!=='Credit'&&ui.payment!=='UPI',notes:ui.billNotes,...summary,demo:db.demo};
  const prior=JSON.stringify(db);
- for(const line of summary.lines){const p=db.products.find(x=>x.id===line.productId);p.stock-=line.qty;db.movements.push({id:uid(),productId:p.id,change:-line.qty,reason:'Sale '+invoice.number,date:invoice.date,createdAt:invoice.createdAt})}
+ for(const line of summary.lines){const p=db.products.find(x=>x.id===line.productId);p.stock=addQty(p.stock,-line.qty,p.unit);db.movements.push({id:uid(),productId:p.id,change:-line.qty,reason:'Sale '+invoice.number,date:invoice.date,createdAt:invoice.createdAt})}
  db.invoices.push(invoice);db.settings.nextInvoice++;
  if(!save()){db=JSON.parse(prior);return}
  ui.cart=[];ui.discount=0;ui.billingSearch='';ui.billNotes='';ui.invoiceId=invoice.id;ui.modal='invoice';render();
@@ -1249,11 +1266,11 @@ function handleAction(action,id){switch(action){
  case 'new-bill':navigate('billing');break;
  case 'add-to-cart':{
   const p=db.products.find(x=>x.id===id);if(!p || p.stock<=0)return;
-  const prev=ui.cart.find(x=>x.productId===id);if(prev){if(prev.qty>=p.stock)return toast('Not enough stock available.','error');prev.qty++}else ui.cart.push({productId:id,qty:1});render();break;
+  const prev=ui.cart.find(x=>x.productId===id);if(prev){const next=cartIncrement(p,prev.qty);if(next===null)return toast('Not enough stock available.','error');prev.qty=next}else ui.cart.push({productId:id,qty:firstCartQty(p)});render();break;
  }
  case 'remove-cart':ui.cart=ui.cart.filter(x=>x.productId!==id);render();break;
- case 'increase-qty':{const x=ui.cart.find(x=>x.productId===id),p=db.products.find(x=>x.id===id);if(x&&p&&x.qty<p.stock)x.qty++;else toast('Not enough stock.','error');render();break}
- case 'decrease-qty':{const x=ui.cart.find(x=>x.productId===id);if(x){x.qty--;if(x.qty<=0)ui.cart=ui.cart.filter(y=>y.productId!==id)}render();break}
+ case 'increase-qty':{const x=ui.cart.find(x=>x.productId===id),p=db.products.find(x=>x.id===id);const next=x&&p?cartIncrement(p,x.qty,isKg(p.unit)?0.1:1):null;if(next!==null)x.qty=next;else toast('Not enough stock.','error');render();break}
+ case 'decrease-qty':{const x=ui.cart.find(x=>x.productId===id);const p=db.products.find(x=>x.id===id);if(x&&p){x.qty=addQty(x.qty,-(isKg(p.unit)?0.1:1),p.unit);if(!validQty(x.qty,p.unit,true))ui.cart=ui.cart.filter(y=>y.productId!==id)}render();break}
  case 'add-accounting':openModal('accounting','expense');break;
  case 'opening-balances':openModal('opening');break;
  case 'record-receipt':openModal('receipt',id);break;
@@ -1320,15 +1337,16 @@ function handleForm(form){const data=Object.fromEntries(new FormData(form));try{
   const name=data.name.trim(),sku=data.sku.trim().toUpperCase(),barcode=cleanBarcode(data.barcode),price=Number(data.price),cost=data.cost===''?0:Number(data.cost),stock=Number(data.stock),lowStock=Number(data.lowStock),expiryDate=String(data.expiryDate||'').trim();
   if(!name||!sku)throw Error('Product name and SKU are required.');
   if(expiryDate&&expiryStatus(expiryDate).state==='invalid')throw Error('Enter a valid expiry date.');
-  validateNonnegative(price,'selling price');validateNonnegative(cost,'purchase cost');validateNonnegative(stock,'stock',true);validateNonnegative(lowStock,'low stock level',true);if(data.gst===""||!Number.isFinite(Number(data.gst))||Number(data.gst)<0||Number(data.gst)>100)throw Error("Enter a valid GST rate between 0 and 100%.");
+  validateNonnegative(price,'selling price');validateNonnegative(cost,'purchase cost');const unit=canonicalUnit(data.unit);if(!validQty(stock,unit)||!validQty(lowStock,unit))throw Error(isKg(unit)?'Enter stock and alert level in kg (up to 3 decimal places).':'Enter whole-number stock and alert quantities.');if(data.gst===""||!Number.isFinite(Number(data.gst))||Number(data.gst)<0||Number(data.gst)>100)throw Error("Enter a valid GST rate between 0 and 100%.");
   if(db.products.some(p=>p.sku.toLowerCase()===sku.toLowerCase()&&p.id!==ui.editId))throw Error('Another product already has that SKU.');
   if(barcode&&db.products.some(p=>p.id!==ui.editId&&[p.barcode,p.sku].some(code=>String(code||'').toLowerCase()===barcode.toLowerCase())))throw Error('This barcode is already assigned to another product.');
-  const attrs={name,sku,barcode,category:data.category.trim(),unit:data.unit.trim()||'pcs',price,cost,lowStock,gst:Number(data.gst),expiryDate};
+  const attrs={name,sku,barcode,category:data.category.trim(),unit,price,cost,lowStock:roundQty(lowStock,unit),gst:Number(data.gst),expiryDate};
   const old=db.products.find(p=>p.id===ui.editId);
+  if(old&&isKg(old.unit)!==isKg(unit)&&(old.stock>0||db.invoices.some(inv=>inv.lines?.some(line=>line.productId===old.id))))throw Error('To change between pieces and kilograms, create a new product or first clear stock for an unsold product.');
   if(old)Object.assign(old,attrs);
-  else db.products.push({id:uid(),...attrs,stock,createdAt:new Date().toISOString()});
+  else db.products.push({id:uid(),...attrs,stock:roundQty(stock,unit),createdAt:new Date().toISOString()});
   const addToBill=ui.addAfterScan&&!old;const productId=old?.id||db.products.at(-1).id;
-  if(!save())return;closeModal();if(addToBill){navigate('billing');const added=db.products.find(p=>p.id===productId);if(added?.stock>0)ui.cart.push({productId,qty:1});render();toast(added?.stock>0?'Product created and added to bill.':'Product saved. Add stock before billing.')}else{render();toast(old?'Product updated.':'Product added to inventory.')}
+  if(!save())return;closeModal();if(addToBill){navigate('billing');const added=db.products.find(p=>p.id===productId);if(added?.stock>0)ui.cart.push({productId,qty:firstCartQty(added)});render();toast(added?.stock>0?'Product created and added to bill.':'Product saved. Add stock before billing.')}else{render();toast(old?'Product updated.':'Product added to inventory.')}
  }
  if(form.id==='customerForm'){
   const name=data.name.trim();if(!name)throw Error('Customer name is required.');
@@ -1340,8 +1358,8 @@ function handleForm(form){const data=Object.fromEntries(new FormData(form));try{
  if(form.id==='refillForm'){
   const p=db.products.find(x=>x.id===ui.editId);if(!p)throw Error('Product not found.');
   if(ui.modal!=='refill')return;
-  const qty=Number(data.quantity),prev=Number(p.stock),next=prev+qty;
-  if(!Number.isSafeInteger(qty)||qty<=0||!Number.isSafeInteger(prev)||prev<0||!Number.isSafeInteger(next)||next>2147483647)throw Error('Enter a valid positive quantity within the stock limit.');
+  const qty=Number(data.quantity),prev=Number(p.stock),next=addQty(prev,qty,p.unit);
+  if(!validQty(data.quantity,p.unit,true)||!validQty(prev,p.unit)||!validQty(next,p.unit))throw Error('Enter a valid positive quantity within the stock limit.');
   const previousMovementCount=db.movements.length;
   p.stock=next;
   db.movements.push({id:uid(),productId:p.id,change:qty,reason:String(data.reason||'').trim().slice(0,120)||'Stock refill received',date:today(),createdAt:new Date().toISOString()});
@@ -1350,10 +1368,10 @@ function handleForm(form){const data=Object.fromEntries(new FormData(form));try{
  }
  if(form.id==='stockForm'){
   const p=db.products.find(x=>x.id===ui.editId),qty=Number(data.quantity);if(!p)throw Error('Product not found.');
-  validateNonnegative(qty,'quantity',true);
-  const prev=p.stock,next=data.mode==='set'?qty:prev+qty,change=next-prev;p.stock=next;
+  if(!validQty(data.quantity,p.unit))throw Error('Enter a valid stock quantity for '+p.unit+'.');
+  const prev=p.stock,next=data.mode==='set'?roundQty(qty,p.unit):addQty(prev,qty,p.unit),change=addQty(next,-prev,p.unit);if(!validQty(next,p.unit))throw Error('Stock limit exceeded.');const oldMovementCount=db.movements.length;p.stock=next;
   if(change!==0)db.movements.push({id:uid(),productId:p.id,change,reason:data.reason.trim()||(data.mode==='set'?'Stock count correction':'Stock received'),date:today(),createdAt:new Date().toISOString()});
-  save();closeModal();render();toast(`Stock updated to ${p.stock} ${p.unit}.`);
+  if(!save()){p.stock=prev;db.movements.length=oldMovementCount;return;}closeModal();render();toast(`Stock updated to ${p.stock} ${p.unit}.`);
  }
  if(form.id==='settingsForm'){
   const prefix=data.invoicePrefix.trim().toUpperCase().replace(/[^A-Z0-9-]/g,'');if(!prefix)throw Error('Invoice prefix is required.');
@@ -1379,7 +1397,7 @@ async function importBackup(file){if(!file)return;try{
    const ac=payload.accounting;
    if(!ac||typeof ac!=='object'||!Array.isArray(ac.entries)||ac.entries.length>100000||ac.entries.some(row=>!row||typeof row.id!=='string'||!Number.isSafeInteger(row.amount)||row.amount<=0||!Object.keys(ACCOUNT_TYPES).includes(row.type)||!['cash','bank'].includes(row.account)||!/^\d{4}-\d{2}-\d{2}$/.test(String(row.date||''))))throw Error('Backup contains invalid accounting transactions.');
  }
- if(!payload.products.every(p=>p&&typeof p.id==='string'&&typeof p.name==='string'&&Number.isInteger(p.stock)&&p.stock>=0&&Number.isFinite(p.price)&&p.price>=0)||!payload.invoices.every(i=>i&&Array.isArray(i.lines)&&Number.isFinite(i.total)))throw Error('Backup contains invalid records.');
+ if(!payload.products.every(p=>p&&typeof p.id==='string'&&typeof p.name==='string'&&typeof p.stock==='number'&&validQty(p.stock,p.unit)&&Number.isFinite(p.price)&&p.price>=0)||!payload.invoices.every(i=>i&&Array.isArray(i.lines)&&Number.isFinite(i.total)))throw Error('Backup contains invalid records.');
  if(!confirm(`Replace this workspace with ${payload.products.length} products and ${payload.invoices.length} invoices from the backup? Your current data will be overwritten.`))return;
  const old=db;db={...emptyDb(),...payload,settings:{...emptyDb().settings,...payload.settings},accounting:normaliseAccounting(payload.accounting)};if(!save()){db=old;return}ui={...ui,page:'dashboard',cart:[],modal:null};render();toast('Backup restored successfully.');
  }catch(err){toast('Import failed: '+err.message,'error')}finally{const f=$('#importFile');if(f)f.value=''}}
@@ -1397,12 +1415,24 @@ document.addEventListener('input',event=>{
  if(input.dataset.search){const key=input.dataset.search;const map={inventory:'search',billing:'billingSearch',sales:'salesSearch',customers:'customerSearch',profit:'profitSearch',accounting:'accountingSearch'};ui[map[key]]=input.value;ui.pages[key]=0;clearTimeout(billnestSearchTimer);billnestSearchTimer=setTimeout(()=>rerenderKeepFocus(`[data-search="${key}"]`),120);}
  if(input.id==='billDiscount'){const n=Number(input.value);ui.discount=Math.max(0,Math.min(100,Number.isFinite(n)?n:0));rerenderKeepFocus('#billDiscount')}
  if(input.id==='billCustomerSearch'){ui.billingCustomerSearch=input.value;clearTimeout(billnestSearchTimer);billnestSearchTimer=setTimeout(()=>rerenderKeepFocus('#billCustomerSearch'),120)}
- if(input.id==='refillQty'){const output=$('#refillResult'),qty=Number(input.value);if(output){const total=Number(output.dataset.current)+qty;output.textContent=input.value!==''&&Number.isSafeInteger(qty)&&qty>0&&Number.isSafeInteger(total)&&total<=2147483647?'Stock after refill: '+total+' '+output.dataset.unit:'Enter a valid positive received quantity.';}}
+ if(input.id==='refillQty'){const output=$('#refillResult'),qty=Number(input.value);if(output){const total=addQty(Number(output.dataset.current),qty,output.dataset.unit);output.textContent=validQty(input.value,output.dataset.unit,true)&&validQty(total,output.dataset.unit)?'Stock after refill: '+total+' '+output.dataset.unit:'Enter a valid positive received quantity.';}}
+ if(input.id==='unit'&&input.closest('#productForm')){const kg=isKg(input.value);for(const id of ['stock','lowStock']){const el=$('#'+id);if(el)el.step=String(kg?0.001:1);}for(const [id,label] of [['price','Selling price'],['cost','Purchase cost']]){const el=document.querySelector('label[for="'+id+'"]');if(el)el.textContent=label+(kg?' per kg (₹)':' per unit (₹)')+(id==='price'?' *':'');}}
+ if(input.dataset.billQty){
+  const p=db.products.find(x=>x.id===input.dataset.billQty),item=ui.cart.find(x=>x.productId===input.dataset.billQty);
+  if(p&&item){const qty=Number(input.value),valid=validQty(input.value,p.unit,true)&&qty<=p.stock;item.qty=valid?roundQty(qty,p.unit):NaN;input.setCustomValidity(valid?'':'Enter 0.001 to '+p.stock+' kg (up to 3 decimal places).');input.setAttribute('aria-invalid',String(!valid));
+   const preview=billingPreview();
+   document.querySelectorAll('[data-bill-line]').forEach(el=>{const line=preview?.lines.find(l=>l.productId===el.dataset.billLine);el.textContent=line?money(line.total):'—';});
+   document.querySelectorAll('[data-bill-total]').forEach(el=>{const key=el.dataset.billTotal;el.textContent=preview?(key==='discount'?'− ':'')+money(preview[key]):'—';});
+   const generate=document.querySelector('[data-action="save-invoice"]');if(generate){generate.disabled=!preview;generate.textContent='✓ Generate invoice · '+(preview?money(preview.total):'Invalid quantity');}
+   const plus=input.closest('.qty-control')?.querySelector('[data-action="increase-qty"]');if(plus)plus.disabled=!valid||cartIncrement(p,item.qty,0.1)===null;
+  }
+ }
  if(input.id==='billNotes')ui.billNotes=input.value;
  if(input.id==='scannerZoom')applyScannerZoom(input.value);
 });
 document.addEventListener('change',event=>{
  const t=event.target;
+ if(t.dataset.billQty&&t.getAttribute('aria-invalid')==='true')t.reportValidity();
  if(t.dataset.filter==='inventory'){ui.filter=t.value;ui.pages.inventory=0;render()}
  if(t.id==='billCustomer'){ui.billingCustomer=t.value;render()}
  if(t.id==='billPayment'){ui.payment=t.value;render()}
@@ -1427,7 +1457,7 @@ globalThis.BillNestCloud?.setRestoreHandler?.(payload=>{
   if(!payload||payload.version!==1||!payload.settings||!Number.isInteger(payload.settings.nextInvoice)||payload.settings.nextInvoice<1)return false;
   if(!Array.isArray(payload.products)||!Array.isArray(payload.invoices)||!Array.isArray(payload.customers)||!Array.isArray(payload.movements))return false;
   if(payload.products.length>100000||payload.invoices.length>100000||payload.customers.length>100000||payload.movements.length>200000)return false;
-  if(!payload.products.every(p=>p&&typeof p.id==='string'&&typeof p.name==='string'&&Number.isInteger(p.stock)&&p.stock>=0&&Number.isFinite(p.price)&&p.price>=0))return false;
+  if(!payload.products.every(p=>p&&typeof p.id==='string'&&typeof p.name==='string'&&typeof p.stock==='number'&&validQty(p.stock,p.unit)&&Number.isFinite(p.price)&&p.price>=0))return false;
   if(!payload.invoices.every(i=>i&&Array.isArray(i.lines)&&Number.isSafeInteger(i.total)&&i.total>=0))return false;
   if(JSON.stringify(payload).length>8_000_000)return false;
   const old=db;
