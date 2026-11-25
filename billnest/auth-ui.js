@@ -2,6 +2,8 @@
 (() => {
  'use strict';
  const cloud=globalThis.BillNestCloud;
+ // Public subscription merchant address, shipped with the QR renderer to prevent mixed-cache configuration.
+ const SUBSCRIPTION_UPI='9631011998@ptsbi';
  const top=document.querySelector('.top-actions');
  if(!cloud||!top)return;
  const esc=value=>String(value??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','\'':'&#39;'}[c]));
@@ -42,8 +44,8 @@
    if(!paymentDialog.open||account()?.id!==paymentAccount)return;
    const content=paymentDialog.querySelector('[data-payment-content]');
    if(rows?.[0]?.status==='pending'){paymentNotice('Payment submitted. Awaiting verification. Do not pay again.');return;}
-   const upi=String(globalThis.BILLNEST_SUBSCRIPTION_UPI||'').trim();
-   if(!/^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+$/.test(upi)){paymentNotice('UPI payments are not configured yet. Please check again later.');return;}
+   const upi=SUBSCRIPTION_UPI;
+   if(!/^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+$/.test(upi)){paymentNotice('Payment details are temporarily unavailable. Reload BillNest and try again.');return;}
    const amount=Number(info.price_paise);
    if(amount!==9900)throw Error('Invalid subscription amount.');
    paymentNotice(rows?.[0]?.status==='rejected'?'Previous payment could not be verified. Check your bank transaction before paying again.':'Scan using your preferred UPI app. Verify the recipient name before paying.');
