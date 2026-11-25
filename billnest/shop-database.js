@@ -39,13 +39,13 @@
       (active?'<div class="bn-db-catalog"><h4>Cloud products: '+escapeHtml(active.name)+'</h4>'+
       '<p class="mini-note">Showing up to 40 cloud products.</p>'+
       (products.length?'<div class="table-scroll"><table class="data-table"><thead><tr><th>SKU</th><th>Product</th><th>Price</th><th>Stock</th></tr></thead><tbody>'+
-       products.map(p=>'<tr><td>'+escapeHtml(p.sku)+'</td><td>'+escapeHtml(p.name)+'</td><td>₹'+(Number(p.price_paise||0)/100).toFixed(2)+'</td><td>'+escapeHtml(p.stock_qty)+'</td></tr>').join('')+
+       products.map(p=>'<tr><td>'+escapeHtml(p.sku)+'</td><td>'+escapeHtml(p.name)+'</td><td>₹'+(Number(p.price_paise||0)/100).toFixed(2)+'</td><td>'+escapeHtml(p.stock_qty)+' '+escapeHtml(p.unit||'pcs')+'</td></tr>').join('')+
        '</tbody></table></div>':'<p class="mini-note">No cloud products to display yet.</p>')+
       (canEdit?'<form id="bnAddCloudProductForm" class="bn-db-form"><h4>Add product to cloud</h4>'+
        '<label>SKU<input name="sku" required maxlength="80" placeholder="PROD-001"></label>'+
        '<label>Product name<input name="name" required maxlength="200"></label>'+
        '<label>Selling price (₹)<input name="price" type="number" min="0" step="0.01" max="100000000" required></label>'+
-       '<label>Opening stock<input name="stock" type="number" min="0" max="1000000" step="1" value="0" required></label>'+
+       '<label>Unit<select name="unit"><option value="pcs">Pieces</option><option value="kg">Kilogram (kg)</option></select></label><label>Opening stock<input name="stock" type="number" min="0" max="1000000" step="0.001" value="0" required></label>'+
        '<button type="submit" class="btn btn-primary btn-sm" '+(busy?'disabled':'')+'>Save cloud product</button></form>':
        '<p class="mini-note">Your role cannot modify cloud products.</p>')+
        '</div>':''):'<p class="mini-note">Sign in to get started.</p>')+
@@ -82,7 +82,7 @@
  }
  async function loadProducts(){
    if(!isUuid(selected)){products=[];return}
-   const rows=await api('/rest/v1/bn_products?select=id,sku,name,price_paise,stock_qty,gst_rate&shop_id=eq.'+
+   const rows=await api('/rest/v1/bn_products?select=id,sku,name,price_paise,stock_qty,gst_rate,unit&shop_id=eq.'+
      encodeURIComponent(selected)+'&order=name.asc&limit=40');
    products=Array.isArray(rows)?rows:[];
  }
@@ -112,14 +112,15 @@
  async function addProduct(form){
    if(busy||!isUuid(selected))return;
    const d=new FormData(form),sku=String(d.get('sku')||'').trim(),name=String(d.get('name')||'').trim();
-   const amount=Number(d.get('price')),stock=Number(d.get('stock')),price=Math.round(amount*100);
+   const amount=Number(d.get('price')),stock=Number(d.get('stock')),price=Math.round(amount*100),unit=d.get('unit')==='kg'?'kg':'pcs';
+   const scaled=stock*(unit==='kg'?1000:1);
    if(!sku||!name||!Number.isFinite(amount)||amount<0||!Number.isSafeInteger(price)||
-      price>10000000000000||!Number.isSafeInteger(stock)||stock<0||stock>1000000)
+      price>10000000000000||!Number.isFinite(stock)||Math.abs(scaled-Math.round(scaled))>0.000001||stock<0||stock>1000000)
      throw Error('Enter a valid SKU, name, price and opening stock.');
    busy=true;paint();
    try{
      await api('/rest/v1/rpc/bn_upsert_product',{method:'POST',
-       body:{p_shop_id:selected,p_sku:sku,p_name:name,p_price_paise:price,p_stock_qty:stock}});
+       body:{p_shop_id:selected,p_sku:sku,p_name:name,p_price_paise:price,p_stock_qty:stock,p_unit:unit}});
      await loadProducts();
      setMessage('Product saved to the selected cloud shop. Local inventory is unchanged.');
    }finally{busy=false;paint()}
