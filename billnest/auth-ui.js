@@ -30,28 +30,29 @@
  const trialBadge=document.createElement('span');trialBadge.className='billnest-trial-badge';trialBadge.hidden=true;top.prepend(trialBadge);
  let paymentBusy=false;
  const paymentDialog=document.createElement('dialog');paymentDialog.className='bn-payment-dialog';document.body.append(paymentDialog);
- let paymentAccount='';
+ let paymentAccount='',paymentPlan='monthly';
+ const planDetails=(info,code)=>{const annual=code==='annual';const amount=Number(annual?info.annual_price_paise:info.price_paise);if(amount!==(annual?99900:9900))throw Error('Invalid subscription amount.');return {code:annual?'annual':'monthly',amount,period:annual?'year':'month',label:annual?'Annual':'Monthly'};};
+ const planButtons=info=>{const monthly=Number(info.price_paise),annual=Number(info.annual_price_paise);return `<div class="bn-subscription-options"><button type="button" class="bn-subscription-option" data-subscription-pay="monthly"><span>Monthly</span><strong>₹${monthly===9900?'99':'—'}</strong><small>per month</small></button><button type="button" class="bn-subscription-option bn-annual-option" data-subscription-pay="annual" ${annual===99900?'':'disabled'}><span>Annual <b class="bn-plan-saving">Save ₹189</b></span><strong>₹${annual===99900?'999':'—'}</strong><small>per year</small></button></div>`;};
  function paymentNotice(message){const el=paymentDialog.querySelector('[data-payment-notice]');if(el)el.textContent=message;}
- async function openPayment(){
+ async function openPayment(requestedPlan='monthly'){
   const user=account(),info=entitlement;
   if(!user||!info||info.user_id!==user.id)return;
   if(paymentDialog.open)return;
-  paymentAccount=user.id;
+  paymentAccount=user.id;paymentPlan=requestedPlan==='annual'?'annual':'monthly';
   paymentDialog.innerHTML='<div class="bn-payment-inner"><button type="button" class="bn-payment-close" aria-label="Close" data-payment-close>×</button><h2>Subscription payment</h2><p data-payment-notice role="status">Checking payment status…</p><div data-payment-content></div></div>';
   paymentDialog.showModal();
   try{
-   const rows=await cloud.databaseRequest('/rest/v1/bn_subscription_payments?select=id,status,created_at&order=created_at.desc&limit=1');
+   const rows=await cloud.databaseRequest('/rest/v1/bn_subscription_payments?select=id,status,created_at,plan_code,amount_paise&order=created_at.desc&limit=1');
    if(!paymentDialog.open||account()?.id!==paymentAccount)return;
    const content=paymentDialog.querySelector('[data-payment-content]');
-   if(rows?.[0]?.status==='pending'){paymentNotice('Payment submitted. Awaiting verification. Do not pay again.');return;}
+   if(rows?.[0]?.status==='pending'){paymentNotice((rows[0].plan_code==='annual'?'Annual':'Monthly')+' payment of ₹'+(Number(rows[0].amount_paise)/100).toFixed(2)+' submitted. Awaiting verification. Do not pay again.');return;}
    const upi=SUBSCRIPTION_UPI;
    if(!/^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+$/.test(upi)){paymentNotice('Payment details are temporarily unavailable. Reload BillNest and try again.');return;}
-   const amount=Number(info.price_paise);
-   if(amount!==9900)throw Error('Invalid subscription amount.');
+   const selected=planDetails(info,paymentPlan),amount=selected.amount;
    paymentNotice(rows?.[0]?.status==='rejected'?'Previous payment could not be verified. Check your bank transaction before paying again.':'Scan using your preferred UPI app. Verify the recipient name before paying.');
-   content.innerHTML='<div class="bn-payment-amount">₹'+(amount/100).toFixed(2)+' <small>/ month</small></div><div class="bn-payment-qr" data-payment-qr></div><p class="bn-payment-hint">On mobile, use another device to scan, or save the QR image and import it in a supported UPI app.</p><form data-payment-form><label>UPI transaction reference (12 digits)<input name="reference" inputmode="numeric" pattern="[0-9]{12}" maxlength="12" required autocomplete="off"></label><button type="submit" class="btn btn-primary">Submit payment for verification</button></form><p class="bn-payment-hint">Access is activated only after BillNest verifies receipt. No automatic renewal.</p>';
+   content.innerHTML='<div class="bn-payment-amount">₹'+(amount/100).toFixed(2)+' <small>/ '+selected.period+'</small></div><div class="bn-payment-qr" data-payment-qr></div><p class="bn-payment-hint">On mobile, use another device to scan, or save the QR image and import it in a supported UPI app.</p><form data-payment-form><label>UPI transaction reference (12 digits)<input name="reference" inputmode="numeric" pattern="[0-9]{12}" maxlength="12" required autocomplete="off"></label><button type="submit" class="btn btn-primary">Submit payment for verification</button></form><p class="bn-payment-hint">Access is activated only after BillNest verifies receipt. No automatic renewal.</p>';
    if(typeof globalThis.QRCode!=='function')throw Error('QR unavailable. Reload and try again.');
-   const uri='upi://pay?'+new URLSearchParams({pa:upi,pn:'BillNest',am:(amount/100).toFixed(2),cu:'INR',tn:'BillNest monthly subscription'}).toString();
+   const uri='upi://pay?'+new URLSearchParams({pa:upi,pn:'BillNest',am:(amount/100).toFixed(2),cu:'INR',tn:'BillNest '+selected.code+' subscription'}).toString();
    new globalThis.QRCode(content.querySelector('[data-payment-qr]'),{text:uri,width:216,height:216,colorDark:'#101e30',colorLight:'#ffffff',correctLevel:globalThis.QRCode.CorrectLevel.M});
   }catch(err){paymentDialog.querySelector('[data-payment-content]')?.replaceChildren();paymentNotice('Unable to load payment details. Reopen this window and try again.');}
  }
@@ -64,18 +65,17 @@
   if(!/^[0-9]{12}$/.test(reference))return;
   paymentBusy=true;const btn=form.querySelector('button');btn.disabled=true;
   try{
-   await cloud.databaseRequest('/rest/v1/bn_subscription_payments',{method:'POST',preference:'return=minimal',body:{user_id:paymentAccount,reference}});
+   await cloud.databaseRequest('/rest/v1/bn_subscription_payments',{method:'POST',preference:'return=minimal',body:{user_id:paymentAccount,reference,plan_code:paymentPlan}});
    if(account()?.id!==paymentAccount)return;
    paymentDialog.querySelector('[data-payment-content]').replaceChildren();
    paymentNotice('Payment submitted. Awaiting verification. Do not pay again.');
   }catch(err){paymentNotice('Could not submit this reference. Close and reopen to check whether it was received. Do not pay again.');}
   finally{paymentBusy=false;btn.disabled=false;}
  });
- document.addEventListener('click',event=>{if(event.target.closest?.('[data-subscription-pay]')){event.preventDefault();void openPayment();}});
+ document.addEventListener('click',event=>{const button=event.target.closest?.('[data-subscription-pay]');if(button){event.preventDefault();void openPayment(button.dataset.subscriptionPay);}});
  function remainingDays(){return Math.max(0,Math.ceil((accessDeadline-performance.now())/86400000));}
  function showPlan(info){
-  const price=Number(info.price_paise)/100;
-  plan.hidden=false;plan.querySelector('[data-plan-price]').textContent='₹'+price.toLocaleString('en-IN');
+  plan.hidden=false;plan.querySelector('[data-plan-options]').innerHTML=planButtons(info);
   plan.querySelector('[data-plan-contact]').textContent='Pay using the UPI QR code. Access is activated after payment verification.';
   layer.hidden=true;document.body.classList.remove('billnest-auth-open');
  }
@@ -89,7 +89,7 @@
   const duration=Date.parse(info.trial_ends_at)-Date.parse(info.trial_started_at);
   const percent=trial&&duration>0?Math.min(100,Math.max(0,(accessDeadline-performance.now())/duration*100)):0;
   const badge=trial?'Free trial':active?'Premium active':'Expired';
-  return `<section id="billnestSubscriptionPanel" class="card setting-section billnest-subscription-panel" aria-label="Subscription information"><div class="subscription-heading"><span class="subscription-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M3 10h18M7 15h4"/></svg></span><div><h3>Subscription</h3><p class="mini-note">Manage your BillNest plan.</p></div><span class="subscription-status ${active?'is-active':''}">${badge}</span></div><div class="subscription-plan"><strong>BillNest Premium</strong><span><b>${esc(price)}</b> / month</span></div>${trial?`<div class="subscription-trial"><strong>${left} day${left===1?'':'s'} remaining</strong><span>15-day free trial</span><div class="subscription-progress" role="progressbar" aria-label="Trial remaining" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(percent)}"><div style="width:${percent}%"></div></div></div>`:''}<div class="subscription-row"><span>Trial started</span><strong>${esc(date(info.trial_started_at))}</strong></div><div class="subscription-row"><span>Trial ends</span><strong>${esc(date(info.trial_ends_at))}</strong></div><div class="subscription-row"><span>Access valid until</span><strong>${esc(date(info.access_ends_at))}</strong></div><div class="subscription-row"><span>Payment status</span><strong>${info.paid_until&&Date.parse(info.paid_until)>Date.parse(info.server_now)?'Paid':'No active paid subscription'}</strong></div><p class="mini-note subscription-note">Pay by UPI QR. Subscription activation requires payment verification.</p><button type="button" class="btn btn-primary subscription-refresh" data-subscription-pay>Pay subscription by QR</button><button type="button" class="btn subscription-refresh" data-subscription-refresh>Refresh subscription status</button></section>`;
+  return `<section id="billnestSubscriptionPanel" class="card setting-section billnest-subscription-panel" aria-label="Subscription information"><div class="subscription-heading"><span class="subscription-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M3 10h18M7 15h4"/></svg></span><div><h3>Subscription</h3><p class="mini-note">Manage your BillNest plan.</p></div><span class="subscription-status ${active?'is-active':''}">${badge}</span></div><div class="subscription-plan"><strong>BillNest Premium</strong><span>${info.last_paid_plan==='annual'?'Annual plan':info.last_paid_plan==='monthly'?'Monthly plan':'Choose a plan'}</span></div>${trial?`<div class="subscription-trial"><strong>${left} day${left===1?'':'s'} remaining</strong><span>15-day free trial</span><div class="subscription-progress" role="progressbar" aria-label="Trial remaining" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(percent)}"><div style="width:${percent}%"></div></div></div>`:''}<div class="subscription-row"><span>Trial started</span><strong>${esc(date(info.trial_started_at))}</strong></div><div class="subscription-row"><span>Trial ends</span><strong>${esc(date(info.trial_ends_at))}</strong></div><div class="subscription-row"><span>Access valid until</span><strong>${esc(date(info.access_ends_at))}</strong></div><div class="subscription-row"><span>Payment status</span><strong>${info.paid_until&&Date.parse(info.paid_until)>Date.parse(info.server_now)?'Paid':'No active paid subscription'}</strong></div><p class="mini-note subscription-note">Pay by UPI QR. Subscription activation requires payment verification.</p>${planButtons(info)}<p class="mini-note">Choose a plan to display its payment QR code.</p><button type="button" class="btn subscription-refresh" data-subscription-refresh>Refresh subscription status</button></section>`;
  }
  function paintSubscription(){const panel=document.getElementById('billnestSubscriptionPanel');if(panel)panel.outerHTML=subscriptionMarkup();}
  globalThis.BillNestSubscription=Object.freeze({settingsMarkup:subscriptionMarkup});
