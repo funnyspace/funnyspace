@@ -73,7 +73,7 @@
    if(!isUuid(selected)||!roles.get(selected))return '';
    const formatDate=value=>{const d=new Date(value);return Number.isFinite(d.getTime())?d.toLocaleString('en-IN',{dateStyle:'short',timeStyle:'short'}):'Not synced';};
    const current=cloud?.deviceInfo?.();
-   return '<section class="bn-sync-panel" aria-label="Device synchronization"><h4>Synced devices</h4><div class="bn-sync-status"><span>'+escapeHtml(navigator.onLine===false?'Offline':lastSync?'Cloud sync enabled':'Ready to sync')+'</span><small>Last successful sync: '+escapeHtml(lastSync?formatDate(lastSync):'Not yet')+'</small></div><p class="mini-note">Refreshes automatically every 20 seconds while this section is open, online and not editing. All members access the same cloud shop records.</p>'+
+   return '<section class="bn-sync-panel" aria-label="Device synchronization"><h4>Synced devices</h4><div class="bn-sync-status"><span>'+escapeHtml(navigator.onLine===false?'Offline':error?'Sync needs attention':lastSync?'Cloud sync enabled':'Ready to sync')+'</span><small>Last successful sync: '+escapeHtml(lastSync?formatDate(lastSync):'Not yet')+'</small></div><p class="mini-note">Refreshes automatically every 20 seconds while this section is open, online and not editing. All members access the same cloud shop records.</p>'+
     '<button type="button" class="btn btn-sm" data-bn-db="refresh" '+(busy?'disabled':'')+'>Sync now</button>'+
     (devices.length?'<div class="bn-team-list">'+devices.map(d=>'<div class="bn-team-member"><div class="bn-member-info"><strong>'+escapeHtml(d.device_name)+(d.user_id===identity&&d.device_id===current?.id?' (This device)':'')+'</strong><small>'+escapeHtml(d.member_name)+' · '+escapeHtml(roleNames[d.role]||d.role)+'</small></div><span class="mini-note">'+escapeHtml(formatDate(d.last_synced_at))+'</span></div>').join('')+'</div>':'<p class="mini-note">No synced devices recorded yet.</p>')+
     '<p class="mini-note">'+(roles.get(selected)==='owner'?'The owner can view all registered shop devices.':'You can view your own registered devices.')+'</p></section>';
@@ -116,7 +116,7 @@
  const jobRpcs={invoice:'bn_issue_invoice',payment:'bn_record_payment',refill:'bn_refill_shared_stock'};
  function pendingJob(){
    if(!identity||!isUuid(selected))return null;
-   try{const raw=localStorage.getItem(jobKey());if(!raw)return null;const job=JSON.parse(raw);if(!jobRpcs[job.kind]||job.body?.p_shop_id!==selected||!isUuid(job.body?.p_idempotency_key))throw Error('Invalid pending request');return job;}catch{return {invalid:true};}
+   try{const raw=localStorage.getItem(jobKey());if(!raw)return null;const job=JSON.parse(raw);if(!Object.hasOwn(jobRpcs,job.kind)||job.body?.p_shop_id!==selected||!isUuid(job.body?.p_idempotency_key))throw Error('Invalid pending request');return job;}catch{return {invalid:true};}
  }
  function pendingMarkup(){
    const job=pendingJob();if(!job)return '';
@@ -125,7 +125,7 @@
  }
  async function runJob(job){
    if(busy||!isUuid(selected)||navigator.onLine===false)return;
-   if(!jobRpcs[job.kind]||job.body.p_shop_id!==selected)throw Error('Invalid request.');
+   if(!Object.hasOwn(jobRpcs,job.kind)||job.body.p_shop_id!==selected)throw Error('Invalid request.');
    const key=jobKey(),actor=identity,sid=selected;
    busy=true;draftDirty=false;paint();
    try{
@@ -140,7 +140,7 @@
    }catch(err){
      if(identity!==actor||selected!==sid)return;
      // A validated SQL rejection is a rolled-back transaction. Network, permission and ambiguous errors keep the request ID.
-     if(err?.status===400&&['22023','P0001','p0001','23514','22p02'].includes(String(err.code||'').toLowerCase())){
+     if(err?.status===400&&['22023','p0001','23514','22p02'].includes(String(err.code||'').toLowerCase())){
        try{localStorage.removeItem(key)}catch{}
        message=String(err.message||'Request rejected. Review the details.').slice(0,200);
      }else message='Request not confirmed. Use Retry pending request; do not enter the sale or payment again.';
@@ -228,8 +228,8 @@
      try{await api('/rest/v1/rpc/bn_upsert_customer',{method:'POST',body:{p_shop_id:selected,p_name:name,p_phone:String(d.get('phone')||''),p_state:String(d.get('state')||''),p_gstin:String(d.get('gstin')||'')}});await loadShared();setMessage('Shared customer saved.');}finally{busy=false;paint();}
    }
  }
- function workspaceMarkup(){return '<div id="bnSharedWorkspace"><div class="page-intro"><div><h2>Shared workspace</h2><p>One shop, synchronized inventory and billing across authorized devices.</p></div><button type="button" class="btn" data-go="billing">Local billing</button></div>'+settingsMarkup()+'</div>';}
- function settingsMarkup(){
+ function workspaceMarkup(){return '<div id="bnSharedWorkspace"><div class="page-intro"><div><h2>Shared workspace</h2><p>One shop, synchronized inventory and billing across authorized devices.</p></div><button type="button" class="btn" data-go="billing">Local billing</button></div>'+settingsMarkup(true)+'</div>';}
+ function settingsMarkup(sharedView=false){
    resetForAccount();
    const signed=Boolean(account());
    const status=!cloud?.hasAuthConfig?.()?'Cloud service is currently unavailable. Contact BillNest support.':!signed?'Sign in to manage your cloud shops.':!loaded?'View your existing cloud shops or create a new one.':shops.length?'Your cloud shops are ready.':'No cloud shops yet.';
@@ -243,7 +243,7 @@
     (signed?'<div class="bn-db-actions"><button class="btn btn-sm" type="button" data-bn-db="refresh" '+(busy?'disabled':'')+'>Load / refresh shops</button></div>'+
       '<form id="bnCreateShopForm" class="bn-db-form"><h4>Create a shop</h4><label>Shop name<input type="text" name="name" minlength="1" maxlength="120" required placeholder="Enter shop name"></label><label>State (optional)<input type="text" name="state" maxlength="100" placeholder="Enter state"></label><button class="btn btn-primary btn-sm" type="submit" '+(busy?'disabled':'')+'>Create shop</button></form>'+
       (shops.length?'<div class="bn-db-select"><label for="bnShopSelect">Cloud shop</label><select id="bnShopSelect" class="select-input" '+(busy?'disabled':'')+'>'+shopOptions()+'</select></div>':'')+
-      (active?(sharedOpen()||globalThis.location?.hash==='#shared'?sharedCheckoutMarkup():'<div class="bn-db-actions"><button type="button" class="btn btn-primary" data-go="shared">Open shared workspace</button></div>')+teamMarkup()+syncMarkup()+invoiceMarkup()+'<div class="bn-db-catalog"><h4>Cloud products: '+escapeHtml(active.name)+'</h4>'+
+      (active?(sharedView?sharedCheckoutMarkup():'<div class="bn-db-actions"><button type="button" class="btn btn-primary" data-go="shared">Open shared workspace</button></div>')+teamMarkup()+syncMarkup()+invoiceMarkup()+'<div class="bn-db-catalog"><h4>Cloud products: '+escapeHtml(active.name)+'</h4>'+
       '<p class="mini-note">Showing up to 1,000 active products (first 1,000 catalogue records).</p>'+
       (products.length?'<div class="table-scroll"><table class="data-table"><thead><tr><th>SKU</th><th>Product</th><th>Price</th><th>Stock</th></tr></thead><tbody>'+
        products.map(p=>'<tr><td>'+escapeHtml(p.sku)+'</td><td>'+escapeHtml(p.name)+'</td><td>₹'+(Number(p.price_paise||0)/100).toFixed(2)+'</td><td>'+escapeHtml(p.stock_qty)+' '+escapeHtml(p.unit||'pcs')+'</td></tr>').join('')+
@@ -258,7 +258,7 @@
        '</div>':''):'<p class="mini-note">Sign in to get started.</p>')+
     '</section>';
  }
- function paint(){const el=document.getElementById('bnDatabasePanel');if(el)el.outerHTML=settingsMarkup()}
+ function paint(){const el=document.getElementById('bnDatabasePanel');if(el)el.outerHTML=settingsMarkup(sharedOpen())}
  async function api(path,options={}){
    const user=account();
    if(!user?.id)throw Error('Please sign in before accessing cloud shops.');
@@ -283,7 +283,7 @@
      const nextSelected=nextShops.some(s=>s.id===selected)?selected:nextShops[0]?.id||'';
      const data=await snapshot(nextSelected,nextRoles.get(nextSelected));
      if(identity!==previousIdentity||account()?.id!==previousIdentity||automatic&&editing())return;
-     if(selected!==nextSelected){cart=[];detail=null;}shops=nextShops;roles=nextRoles;selected=nextSelected;applySnapshot(data);loaded=true;
+     if(selected!==nextSelected){cart=[];detail=null;}else if(detail){const updated=data.invoices.find(v=>v.id===detail.row.id);if(!updated||updated.status!==detail.row.status||Number(updated.total_paise)!==Number(detail.row.total_paise))detail=null;}shops=nextShops;roles=nextRoles;selected=nextSelected;applySnapshot(data);loaded=true;
      try{if(selected)localStorage.setItem('billnest-cloud-shop-'+identity,selected)}catch{}
      message=automatic?'':'Cloud shop synchronized.';error=false;
    }catch(err){
@@ -301,11 +301,12 @@
    if(busy)return;
    const data=new FormData(form),name=String(data.get('name')||'').trim(),state=String(data.get('state')||'').trim();
    if(name.length<1||name.length>120)throw Error('Enter a shop name (up to 120 characters).');
+   if(cart.length&&!confirm('Create another shop and discard this unsubmitted shared cart?'))return;
    busy=true;paint();
    try{
      const id=await api('/rest/v1/rpc/bn_create_shop',{method:'POST',body:{p_name:name,p_state:state,p_invoice_prefix:'INV'}});
      if(!isUuid(id))throw Error('Cloud shop response was invalid.');
-     selected=id;
+     selected=id;cart=[];detail=null;
      await apiRefreshAfterMutation();
      setMessage('Cloud shop created.');
    }finally{busy=false;paint()}
@@ -325,8 +326,9 @@
    const d=new FormData(form),sku=String(d.get('sku')||'').trim(),name=String(d.get('name')||'').trim();
    const amount=Number(d.get('price')),stock=Number(d.get('stock')),gst=Number(d.get('gst')),price=Math.round(amount*100),unit=d.get('unit')==='kg'?'kg':'pcs';
    const scaled=stock*(unit==='kg'?1000:1);
+   if(!['owner','manager'].includes(roles.get(selected)))throw Error('Only the owner or manager can create products.');
    if(!sku||!name||!Number.isFinite(amount)||amount<0||!Number.isSafeInteger(price)||
-      price>10000000000000||!Number.isFinite(gst)||gst<0||gst>100||!Number.isFinite(stock)||Math.abs(scaled-Math.round(scaled))>0.000001||stock<0||stock>1000000)
+      price>10000000000000||!Number.isFinite(gst)||gst<0||gst>100||!Number.isFinite(stock)||Math.abs(scaled-Math.round(scaled))>0.000001||stock<0||stock>1000000||(stock>0&&stock<(unit==='kg'?0.001:1)))
      throw Error('Enter a valid SKU, name, price and opening stock.');
    busy=true;paint();
    try{
