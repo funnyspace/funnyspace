@@ -456,7 +456,7 @@ function normaliseAccounting(value){
 function readDb(){try{const raw=localStorage.getItem(STORE_KEY);if(!raw)return sampleDb();const data=JSON.parse(raw);if(!data || data.version!==1 || !Array.isArray(data.products)||!Array.isArray(data.invoices)||!Array.isArray(data.customers))throw Error('Unsupported data');return {...emptyDb(),...data,settings:{...emptyDb().settings,...data.settings},accounting:normaliseAccounting(data.accounting)};}catch(err){console.warn('Could not read existing workspace:',err);return emptyDb()}}
 let db=readDb();
 const pageFromHash = () => {const page=(globalThis.location?.hash||'').replace(/^#\/?/,'').split('/')[0].toLowerCase();return PAGES.some(p=>p[0]===page)?page:'dashboard'};
-let ui={pages:{},billingCustomerSearch:'',page:pageFromHash(),search:'',filter:'all',salesSearch:'',customerSearch:'',reportRange:'30',profitRange:'30',profitSearch:'',accountingRange:'30',accountingSearch:'',modal:null,editId:null,cart:[],billingSearch:'',billingCustomer:'',discount:0,payment:'Cash',billNotes:'',invoiceId:null,invoicePrintFormat:null,scanCode:'',addAfterScan:false};
+let ui={pages:{},billingCustomerSearch:'',page:pageFromHash(),search:'',filter:'all',salesSearch:'',customerSearch:'',reportRange:'30',profitRange:'30',profitSearch:'',accountingRange:'30',accountingSearch:'',modal:null,editId:null,cart:[],billingSearch:'',billingCustomer:'',discount:0,payment:'Cash',billNotes:'',invoiceId:null,scanCode:'',addAfterScan:false};
 let toastTimer;
 const PAGE_SIZE=40;
 const PAGE_KEYS=new Set(['inventory','billing','sales','customers','profit','receivables','cashbook','reorder']);
@@ -1186,7 +1186,9 @@ function renderModal(){let h='';
  if(ui.modal==='invoice'){
  const inv=db.invoices.find(x=>x.id===ui.invoiceId);if(!inv)return closeModal();
  const paymentAction=inv.payment==='UPI'&&invoiceOutstanding(inv,db.accounting.entries)>0?'<button class="btn btn-primary" data-action="record-receipt" data-id="'+e(inv.id)+'">✓ Record verified payment</button>':'';
- const format=printFormat(ui.invoicePrintFormat??db.settings.printFormat); h=shellModal(`Invoice ${e(inv.number)}`,`${formatDate(inv.date)} · ${inv.paid?'Paid':'Unpaid'}`,`<div class="modal-body"><div class="bn-printer-toolbar"><label for="invoicePrintFormat">Paper format</label><select id="invoicePrintFormat" aria-label="Invoice paper format">${printOptions(format)}</select><p>${e(printHint(format))}</p></div><div class="bn-print-preview" id="bnInvoicePreview">${invoiceLayout(inv,format)}</div></div>`,`${paymentAction}<button class="btn" data-action="close-modal">Close</button><button class="btn btn-primary" data-action="print-invoice" data-id="${e(inv.id)}">${format==='a4'?'▤ Print / Save as PDF':'▤ Print thermal receipt'}</button>`,'invoice-modal');
+ const preferred=printFormat(db.settings.printFormat);
+ const buttons=[['a4','Print A4 / PDF','print-invoice-a4'],['thermal58','Print 58 mm','print-invoice-58'],['thermal80','Print 80 mm','print-invoice-80']].map(([format,label,action])=>`<button type="button" class="btn ${format===preferred?'btn-primary':''}" data-action="${action}" data-id="${e(inv.id)}">▤ ${label}</button>`).join('');
+ h=shellModal(`Invoice ${e(inv.number)}`,`${formatDate(inv.date)} · ${inv.paid?'Paid':'Unpaid'}`,`<div class="modal-body">${invoicePaper(inv)}</div>`,`<div class="bn-invoice-print-actions" aria-label="Print invoice">${buttons}</div>${paymentAction}<button class="btn" data-action="close-modal">Close</button>`,'invoice-modal');
  }
  $('#modalLayer').innerHTML=h;
  if(ui.modal==='invoice')drawInvoiceUpiQr($('#modalLayer'));
@@ -1265,7 +1267,7 @@ function saveInvoice(){
  for(const line of summary.lines){const p=db.products.find(x=>x.id===line.productId);p.stock=addQty(p.stock,-line.qty,p.unit);db.movements.push({id:uid(),productId:p.id,change:-line.qty,reason:'Sale '+invoice.number,date:invoice.date,createdAt:invoice.createdAt})}
  db.invoices.push(invoice);db.settings.nextInvoice++;
  if(!save()){db=JSON.parse(prior);return}
- ui.cart=[];ui.discount=0;ui.billingSearch='';ui.billNotes='';ui.invoiceId=invoice.id;ui.invoicePrintFormat=null;ui.modal='invoice';render();
+ ui.cart=[];ui.discount=0;ui.billingSearch='';ui.billNotes='';ui.invoiceId=invoice.id;ui.modal='invoice';render();
  if(invoice.payment==='UPI')$('#modalLayer')?.querySelector?.('.invoice-upi-payment')?.scrollIntoView?.({behavior:'auto',block:'center'});
  toast(`Invoice ${invoice.number} saved. Stock updated.`)
 }
@@ -1313,8 +1315,8 @@ function handleAction(action,id){switch(action){
  }
  case 'export-accounting':exportAccounting();break;
  case 'save-invoice':saveInvoice();break;
- case 'view-invoice':ui.invoiceId=id;ui.invoicePrintFormat=null;openModal('invoice');break;
- case 'print-invoice':{const inv=db.invoices.find(i=>i.id===id);if(!inv)return;printDocument(inv,ui.invoicePrintFormat??db.settings.printFormat);break}
+ case 'view-invoice':ui.invoiceId=id;openModal('invoice');break;
+ case 'print-invoice':case 'print-invoice-a4':case 'print-invoice-58':case 'print-invoice-80':{const inv=db.invoices.find(i=>i.id===id);if(!inv)return;const format=action==='print-invoice-a4'?'a4':action==='print-invoice-58'?'thermal58':action==='print-invoice-80'?'thermal80':db.settings.printFormat;printDocument(inv,format);break}
  case 'test-printer':printDocument(printerTestInvoice(),$('#printFormat')?.value??db.settings.printFormat);break;
  case 'mark-paid':openModal('receipt',id);break
  case 'export-products':exportProducts();break;
@@ -1463,7 +1465,6 @@ document.addEventListener('input',event=>{
 });
 document.addEventListener('change',event=>{
  const t=event.target;
- if(t.id==='invoicePrintFormat'&&ui.modal==='invoice'){ui.invoicePrintFormat=printFormat(t.value);renderModal();return;}
  if(t.dataset.billQty&&t.getAttribute('aria-invalid')==='true')t.reportValidity();
  if(t.dataset.filter==='inventory'){ui.filter=t.value;ui.pages.inventory=0;render()}
  if(t.id==='billCustomer'){ui.billingCustomer=t.value;render()}
