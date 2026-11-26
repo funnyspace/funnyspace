@@ -474,9 +474,9 @@
 
 /* Direct printing buttons below the invoice; no separate paper selector. */
 .invoice-modal .modal-footer{flex-wrap:wrap;gap:8px}
-.bn-invoice-print-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;width:100%;flex:1 0 100%}
-.bn-invoice-print-actions .btn{min-width:0;min-height:42px;white-space:normal;text-align:center;padding:8px 10px;line-height:1.25}
-@media(max-width:480px){.bn-invoice-print-actions{gap:5px}.bn-invoice-print-actions .btn{font-size:11px;padding:6px 3px;min-height:44px}}
+.bn-invoice-print-actions{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;width:100%;flex:1 0 100%}
+.bn-invoice-print-actions .btn{min-width:0;min-height:44px;white-space:normal;overflow-wrap:anywhere;justify-content:center;text-align:center;padding:8px 5px;font-size:clamp(11px,1.6vw,14px);line-height:1.2}
+@media(max-width:480px){.bn-invoice-print-actions{gap:3px}.bn-invoice-print-actions .btn{font-size:10px;padding:6px 2px;min-height:48px}}
 @media print{.bn-invoice-print-actions{display:none!important}}
 
 /* Direct BLE print controls below the invoice. */
