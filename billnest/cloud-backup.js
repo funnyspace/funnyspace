@@ -331,6 +331,7 @@
   async function sendOtp(channel, identifier, mode='signup') {
     if(!config)throw Error('Account creation is not enabled yet. The site owner must configure Supabase authentication.');
     if(!['signup','signin'].includes(mode))throw Error('Choose Create account or Sign in.');
+    if(mode==='signup'&&channel!=='email')throw Error('Create an account using your email ID.');
     const target=normalizeOtpContact(channel,identifier);
     await request('/auth/v1/otp',{method:'POST',body:channel==='email'
       ? {email:target,create_user:mode==='signup'}
