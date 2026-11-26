@@ -159,7 +159,7 @@
    plan.hidden=true;
    if(!loaded){
     loading=true;
-    await loadScript('app.bundle.js?v=50');
+    await loadScript('app.bundle.js?v=51');
     await loadScript('i18n.js?v=3');
     loaded=true;loading=false;
    }
