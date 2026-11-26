@@ -239,7 +239,7 @@
   updateButton();
   if(layer.hidden)return;
   const user=account();
-  if(mode==='signup'&&channel!=='email'){channel='email';resetFlow();}
+  if(channel!=='email'){channel='email';resetFlow();}
   let content='';
   if(user){
    content='<div class="billnest-auth-user"><strong class="billnest-auth-status"><span aria-hidden="true"></span>Signed in</strong><div class="billnest-auth-identity">'+esc(user.full_name||user.email||user.phone||'BillNest user')+'</div>'+(user.full_name&&user.email?'<p class="billnest-auth-note">'+esc(user.email)+'</p>':'')+(user.contact_mobile?'<p class="billnest-auth-note">Mobile: '+esc(user.contact_mobile)+' (not verified)</p>':'')+'</div>'+
@@ -248,17 +248,14 @@
     (importAvailable()?'<button type="button" class="billnest-auth-primary" data-auth-import>Copy existing offline store into this account</button><p class="billnest-auth-note">Your original offline store will not be deleted.</p>':'')+
     '<button type="button" class="billnest-auth-logout" data-auth-signout>Sign out</button>';
   }else if(!cloud.hasAuthConfig?.()){
-   content='<section class="billnest-auth-setup" role="alert"><strong>Email and mobile login need activation</strong>'+
-    '<p class="billnest-auth-note">Connect your Supabase project and enable email authentication or a mobile SMS provider to receive verification codes.</p>'+
+   content='<section class="billnest-auth-setup" role="alert"><strong>Email login needs activation</strong>'+
+    '<p class="billnest-auth-note">Connect your Supabase project and enable email authentication to receive verification codes.</p>'+
     '<p class="billnest-auth-note">The workspace is protected. Ask the shop administrator to configure authentication, then reload.</p></section>';
   }else{
-   content=(mode==='signup'?'':'<div class="billnest-auth-tabs billnest-auth-channel" role="tablist" aria-label="Sign-in method">'+
-    '<button type="button" role="tab" data-auth-tab="email" aria-selected="'+(channel==='email')+'">Email ID</button>'+
-    '<button type="button" role="tab" data-auth-tab="phone" aria-selected="'+(channel==='phone')+'">Mobile number</button></div>')+
-    '<form id="billnestAuthSend" class="billnest-auth-form">'+
+   content='<form id="billnestAuthSend" class="billnest-auth-form">'+
     (mode==='signup'?'<label for="billnestSignupName">Full name</label><input id="billnestSignupName" name="full_name" type="text" autocomplete="name" maxlength="100" required value="'+esc(signupName)+'" '+(sent?'readonly':'')+'><label for="billnestSignupMobile">Mobile number</label><input id="billnestSignupMobile" name="contact_mobile" type="tel" inputmode="tel" autocomplete="tel" maxlength="24" required value="'+esc(signupMobile)+'" '+(sent?'readonly':'')+'>':'')+
-    '<label for="billnestAuthContact">'+(channel==='email'?'Email ID':'Mobile number')+'</label>'+
-    '<input id="billnestAuthContact" name="contact" '+(channel==='email'?'type="email" inputmode="email" autocomplete="email"':'type="tel" inputmode="tel" autocomplete="tel"')+
+    '<label for="billnestAuthContact">Email ID</label>'+
+    '<input id="billnestAuthContact" name="contact" type="email" inputmode="email" autocomplete="email"'+
     ' value="'+esc(contact)+'" maxlength="200" required '+(sent?'readonly':'')+'>'+
     (!sent?'<button type="submit" class="billnest-auth-primary" '+(busy?'disabled':'')+'>'+(mode==='signup'?'Send registration code':'Send login code')+'</button>':'')+'</form>'+
     (sent?'<form id="billnestAuthVerify" class="billnest-auth-form"><label for="billnestAuthOtp">Verification code</label>'+
@@ -269,7 +266,7 @@
     '<button type="button" data-auth-restart class="billnest-auth-secondary">Change '+(channel==='email'?'email':'number')+'</button></div></form>':'')+
     '<p class="billnest-auth-note">'+(mode==='signup'
       ?'Your verification code is sent to your email. Your mobile number is saved as contact information, not verified by SMS.'
-      :'Enter the email ID or mobile number registered with your account. Sign in will not create another account.')+
+      :'Enter the email ID registered with your account. Sign in will not create another account.')+
     ' An internet connection is required to receive a code.</p>';
   }
   const footer=(!user&&cloud.hasAuthConfig?.())
@@ -298,12 +295,9 @@
   if(target.matches('[data-auth-close]')){close();return}
   if(target.matches('[data-auth-use-email]')){channel='email';resetFlow();render();layer.querySelector('#billnestAuthContact')?.focus();return}
   if(target.matches('[data-auth-mode]')){
-   mode=target.dataset.authMode;if(mode==='signup')channel='email';resetFlow();render();layer.querySelector('#billnestAuthContact')?.focus();return;
+   mode=target.dataset.authMode;channel='email';resetFlow();render();layer.querySelector('#billnestAuthContact')?.focus();return;
   }
-  if(target.matches('[data-auth-tab]')){
-   if(mode==='signup')return;
-   channel=target.dataset.authTab;resetFlow();render();layer.querySelector('#billnestAuthContact')?.focus();return;
-  }
+
   if(target.matches('[data-auth-restart]')){resetFlow();render();layer.querySelector('#billnestAuthContact')?.focus();return}
   if(target.matches('[data-auth-settings]')){close();location.hash='#settings';return}
   if(target.matches('[data-auth-signout]')){
@@ -321,7 +315,7 @@
    return;
   }
   if(target.matches('[data-auth-resend]')){
-   if(!sent||resendSeconds()>0||(mode==='signup'&&channel!=='email'))return;
+   if(!sent||resendSeconds()>0||channel!=='email')return;
    busy=true;updateResendState();
    cloud.sendOtp(channel,contact,mode,mode==='signup'?{full_name:signupName,contact_mobile:signupMobile}:undefined).then(result=>{
     contact=result.contact;resendAfter=Date.now()+60000;
@@ -337,7 +331,7 @@
   if(form.id!=='billnestAuthSend'&&form.id!=='billnestAuthVerify')return;
   e.preventDefault();
   if(busy)return;
-  if(mode==='signup'&&channel!=='email'){channel='email';resetFlow();render();return;}
+  if(channel!=='email'){channel='email';resetFlow();render();return;}
   busy=true;
   const submit=form.querySelector('[type=submit]');
   if(submit)submit.disabled=true;
