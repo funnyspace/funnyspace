@@ -409,7 +409,7 @@ const e = escapeHtml;
 const STORE_KEY = globalThis.BillNestCloud?.workspaceKey?.() || 'billnest-workspace-v1';
 const STATES = ['Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chhattisgarh','Delhi','Goa','Gujarat','Haryana','Himachal Pradesh','Jharkhand','Karnataka','Kerala','Madhya Pradesh','Maharashtra','Manipur','Meghalaya','Mizoram','Nagaland','Odisha','Punjab','Rajasthan','Sikkim','Tamil Nadu','Telangana','Tripura','Uttar Pradesh','Uttarakhand','West Bengal','Andaman and Nicobar Islands','Chandigarh','Dadra and Nagar Haveli and Daman and Diu','Jammu and Kashmir','Ladakh','Lakshadweep','Puducherry'];
 const PAGES = [
- ['dashboard','Dashboard','▦'],['billing','Billing','▧'],['inventory','Inventory','▤'],['sales','Invoices & Sales','▤'],['customers','Customers','♙'],['accounting','Accounting','₹'],['reports','Reports','▥'],['settings','Settings','⚙']
+ ['dashboard','Dashboard','▦'],['billing','Billing','▧'],['inventory','Inventory','▤'],['sales','Invoices & Sales','▤'],['customers','Customers','♙'],['accounting','Accounting','₹'],['reports','Reports','▥'],['shared','Shared workspace','▧'],['settings','Settings','⚙']
 ];
 const ICON_PATHS = {
  billing:'<rect x="4" y="3" width="16" height="19" rx="2"/><path d="M8 8h8M8 12h8M8 16h3m4 0h1"/>',
@@ -1009,8 +1009,8 @@ function render(){
  $('#pageTitle').textContent=PAGES.find(p=>p[0]===ui.page)?.[1]||'Overview';
  $('#storeName').textContent=db.settings.businessName||'My Store';
  $('#storeAvatar').textContent=(db.settings.businessName||'My Store').split(/\s+/).slice(0,2).map(x=>x[0]).join('').toUpperCase();
- const screens={dashboard:renderDashboard,inventory:renderInventory,billing:renderBilling,sales:renderSales,customers:renderCustomers,accounting:renderAccounting,reports:renderReports,settings:renderSettings};
- try{$('#main').innerHTML=screens[ui.page]()}catch(err){console.error('BillNest screen error:',err);$('#main').innerHTML=`<section class="card section-card" role="alert"><h2>Unable to display this section</h2><p>Please return to Dashboard, or restore your latest backup in Settings.</p><button class="btn btn-primary" data-go="dashboard">Go to Dashboard</button></section>`;}
+ const screens={dashboard:renderDashboard,inventory:renderInventory,billing:renderBilling,sales:renderSales,customers:renderCustomers,accounting:renderAccounting,reports:renderReports,shared:()=>globalThis.BillNestDatabase?.workspaceMarkup?.()||'<p>Shared workspace unavailable.</p>',settings:renderSettings};
+ try{$('#main').innerHTML=(['dashboard','billing','inventory','sales'].includes(ui.page)?'<div class="bn-shared-banner"><span><strong>Local workspace</strong> · For billing on multiple devices, use the shared cloud workspace.</span><button type="button" class="btn" data-go="shared">Shared workspace</button></div>':'')+screens[ui.page]();if(ui.page==='shared')setTimeout(()=>globalThis.BillNestDatabase?.autoSync?.(),0)}catch(err){console.error('BillNest screen error:',err);$('#main').innerHTML=`<section class="card section-card" role="alert"><h2>Unable to display this section</h2><p>Please return to Dashboard, or restore your latest backup in Settings.</p><button class="btn btn-primary" data-go="dashboard">Go to Dashboard</button></section>`;}
  if(ui.modal)renderModal();else $('#modalLayer').innerHTML='';
 }
 function navigate(page,updateHash=true){if(page!=='settings')pendingLogo=null;clearTimeout(billnestSearchTimer);if(!PAGES.some(p=>p[0]===page))return;if(scanner.open)stopScanner();ui.page=page;ui.modal=null;ui.search='';ui.filter='all';ui.billingSearch='';render();$('.sidebar').classList.remove('open');$('#backdrop')?.classList.remove('show');if(updateHash&&globalThis.location&&location.hash!=='#'+page)location.hash=page;window.scrollTo?.({top:0,behavior:'instant'});}
