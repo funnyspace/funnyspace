@@ -488,3 +488,27 @@
 .invoice-modal .bn-print-button-row>.btn{width:100%!important;min-width:0!important;max-width:none!important;margin:0!important;min-height:48px!important;white-space:normal!important;overflow-wrap:anywhere!important;justify-content:center!important;text-align:center!important}
 .invoice-modal .bn-invoice-print-actions .bn-bluetooth-hint{margin:6px 0 0}
 @media print{.invoice-modal .bn-invoice-print-actions[data-print-layout="five-inline-v84"]{display:none!important}}
+
+/* Compact, viewport-aware sidebar: Settings remains visible even when the workspace list scrolls. */
+.sidebar{height:100vh;height:100dvh;min-height:0;max-height:100dvh;overflow:hidden;padding:16px 12px 12px;box-sizing:border-box}
+.sidebar .brand{flex:0 0 auto;margin:0 8px 22px;gap:9px}
+.sidebar .brand-mark{width:39px;height:44px;flex-basis:39px}
+.sidebar .brand strong{font-size:23px}
+.sidebar .brand small{font-size:7px;letter-spacing:1.1px;margin-top:4px}
+.sidebar-caption{flex:0 0 auto;margin:0 10px 7px;font-size:10px}
+.sidebar #navigation{flex:0 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#496275 transparent;gap:3px;padding:2px 1px 4px}
+.sidebar .nav-item{flex:0 0 auto;min-height:44px;padding:8px 10px;gap:10px;border-radius:8px;line-height:1.25;font-size:13px}
+.sidebar .nav-item>span:last-child{min-width:0;overflow-wrap:anywhere}
+.sidebar .nav-item:focus-visible{outline:2px solid #8be2bf;outline-offset:-2px}
+.sidebar .nav-icon.nav-icon-3d{width:25px;height:25px;flex-basis:25px}
+.sidebar #settingsNavigation{flex:0 0 auto;min-height:0;gap:0;margin-top:auto;padding:7px 1px 3px;border-top:1px solid #2b3d51}
+.sidebar #settingsNavigation .nav-item{background-color:#1c3146}
+.sidebar #settingsNavigation .nav-item:hover{background-color:#29435b}
+.sidebar #settingsNavigation .nav-item.active{background-color:#24443f}
+.sidebar .sidebar-bottom{flex:0 0 auto;margin-top:4px;padding:9px 3px 0;gap:8px}
+.sidebar .store-avatar{flex:0 0 32px;width:32px;height:32px}
+.sidebar .sidebar-settings{flex-shrink:0}
+@media(max-height:660px){.sidebar{padding-top:10px;padding-bottom:8px}.sidebar .brand{margin-bottom:12px}.sidebar .brand-mark{width:35px;height:40px;flex-basis:35px}.sidebar-caption{margin-bottom:4px}.sidebar #navigation{gap:2px}.sidebar .nav-item{padding:7px 9px;min-height:42px}.sidebar #settingsNavigation{padding-top:5px}.sidebar .sidebar-bottom{padding-top:6px}}
+@media(max-height:420px){.sidebar .sidebar-bottom{display:none}.sidebar .brand{margin-bottom:6px}.sidebar-caption{margin-bottom:3px}}
+@media(max-width:700px){.sidebar{z-index:11;width:min(264px,88vw);padding-bottom:calc(10px + env(safe-area-inset-bottom,0px))}.mobile-backdrop.show{z-index:10}.sidebar .nav-item{min-height:44px}}
+@media print{.sidebar{display:none!important}}
