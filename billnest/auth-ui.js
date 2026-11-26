@@ -157,7 +157,7 @@
    plan.hidden=true;
    if(!loaded){
     loading=true;
-    await loadScript('app.bundle.js?v=48');
+    await loadScript('app.bundle.js?v=49');
     await loadScript('i18n.js?v=3');
     loaded=true;loading=false;
    }
