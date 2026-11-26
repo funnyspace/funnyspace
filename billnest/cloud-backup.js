@@ -425,6 +425,7 @@
     getStatus:statusLabel,
     hasAuthConfig:()=>Boolean(config?.url&&config?.key),
     currentAccount:accountInfo,
+    deviceInfo:()=>({id:deviceId,name:deviceName()}),
     validateSession,
     workspaceKey,
     sendOtp,
