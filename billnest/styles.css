@@ -481,3 +481,10 @@
 
 /* Direct BLE print controls below the invoice. */
 .bn-invoice-print-actions .bn-bluetooth-print{background:#edf5ff;color:#1b4b81;border-color:#bdcfe4}.bn-invoice-print-actions .bn-bluetooth-hint{grid-column:1/-1;margin:0;color:#617888;font-size:11px;line-height:1.4;white-space:normal;overflow-wrap:anywhere}.bn-invoice-print-actions .bn-bluetooth-error{color:#a2322a}.bn-invoice-print-actions .bn-bluetooth-print:disabled{opacity:.55;cursor:wait}
+
+/* v84: keep the five actual print controls in one dedicated, nonwrapping grid. Status is outside the grid. */
+.invoice-modal .bn-invoice-print-actions[data-print-layout="five-inline-v84"]{display:block!important;flex:0 0 100%!important;width:100%!important;min-width:0!important;max-width:100%!important}
+.invoice-modal .bn-print-button-row{display:grid!important;grid-template-columns:repeat(5,minmax(0,1fr))!important;gap:4px;align-items:stretch;min-width:0;width:100%}
+.invoice-modal .bn-print-button-row>.btn{width:100%!important;min-width:0!important;max-width:none!important;margin:0!important;min-height:48px!important;white-space:normal!important;overflow-wrap:anywhere!important;justify-content:center!important;text-align:center!important}
+.invoice-modal .bn-invoice-print-actions .bn-bluetooth-hint{margin:6px 0 0}
+@media print{.invoice-modal .bn-invoice-print-actions[data-print-layout="five-inline-v84"]{display:none!important}}
