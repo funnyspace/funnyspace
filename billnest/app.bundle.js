@@ -30,8 +30,10 @@ const qtyScale = unit => isKg(unit)?1000:1;
 const qtyStep = unit => isKg(unit)?0.001:1;
 const qtyLimit = 2147483647;
 const validQty = (value,unit,positive=false) => {
- const scale=qtyScale(unit),n=Number(value),scaled=n*scale;
- return value!==''&&value!==null&&value!==undefined&&Number.isFinite(n)&&n>=0&&n<=qtyLimit&&(!positive||n>0)&&Number.isSafeInteger(Math.round(scaled))&&Math.abs(scaled-Math.round(scaled))<0.000001;
+ const scale=qtyScale(unit),n=Number(value),scaled=n*scale,units=Math.round(scaled);
+ // A nonzero amount must represent at least one gram or one whole item.
+ // The tolerance below is only for floating-point arithmetic, never to accept sub-minimum amounts.
+ return (typeof value==='number'||typeof value==='string'&&value.trim()!=='')&&Number.isFinite(n)&&n>=0&&n<=qtyLimit&&(!positive||units>=1)&&(n===0||n>=1/scale)&&Number.isSafeInteger(units)&&Math.abs(scaled-units)<0.000001;
 };
 const roundQty = (n,unit) => Math.round(n*qtyScale(unit))/qtyScale(unit);
 const addQty = (a,b,unit) => (Math.round(a*qtyScale(unit))+Math.round(b*qtyScale(unit)))/qtyScale(unit);
@@ -48,7 +50,7 @@ function calculateInvoice(items, productMap, discountPercent = 0, settings = {},
   for (const item of items) {
     const product = productMap[item.productId];
     if (!product) throw new Error('One of the products no longer exists.');
-    if (!validQty(item.qty,product.unit,true)) throw new Error('Invalid quantity for ' + product.name);
+    if (!validQty(item.qty,product.unit,true)) throw new Error('Invalid quantity for ' + product.name + (isKg(product.unit)?'. Minimum 0.001 kg (1 gram), up to 3 decimal places.':'. Enter at least 1 whole unit.'));
     if (!validQty(product.stock,product.unit)) throw new Error('Invalid available stock for ' + product.name + '. Update inventory before billing.');
     const scale = qtyScale(product.unit);
     const previous = grouped.get(product.id);
@@ -1349,16 +1351,18 @@ function handleForm(form){const data=Object.fromEntries(new FormData(form));try{
   const name=data.name.trim(),sku=data.sku.trim().toUpperCase(),barcode=cleanBarcode(data.barcode),price=Number(data.price),cost=data.cost===''?0:Number(data.cost),stock=Number(data.stock),lowStock=Number(data.lowStock),expiryDate=String(data.expiryDate||'').trim();
   if(!name||!sku)throw Error('Product name and SKU are required.');
   if(expiryDate&&expiryStatus(expiryDate).state==='invalid')throw Error('Enter a valid expiry date.');
-  validateNonnegative(price,'selling price');validateNonnegative(cost,'purchase cost');const unit=canonicalUnit(data.unit);if(!validQty(stock,unit)||!validQty(lowStock,unit))throw Error(isKg(unit)?'Enter stock and alert level in kg (up to 3 decimal places).':'Enter whole-number stock and alert quantities.');if(data.gst===""||!Number.isFinite(Number(data.gst))||Number(data.gst)<0||Number(data.gst)>100)throw Error("Enter a valid GST rate between 0 and 100%.");
+  validateNonnegative(price,'selling price');validateNonnegative(cost,'purchase cost');const unit=canonicalUnit(data.unit);if(!validQty(data.stock,unit)||!validQty(data.lowStock,unit))throw Error(isKg(unit)?'Enter zero or at least 0.001 kg (up to 3 decimal places) for stock and alert level.':'Enter zero or whole-number stock and alert quantities.');if(data.gst===""||!Number.isFinite(Number(data.gst))||Number(data.gst)<0||Number(data.gst)>100)throw Error("Enter a valid GST rate between 0 and 100%.");
   if(db.products.some(p=>p.sku.toLowerCase()===sku.toLowerCase()&&p.id!==ui.editId))throw Error('Another product already has that SKU.');
   if(barcode&&db.products.some(p=>p.id!==ui.editId&&[p.barcode,p.sku].some(code=>String(code||'').toLowerCase()===barcode.toLowerCase())))throw Error('This barcode is already assigned to another product.');
   const attrs={name,sku,barcode,category:data.category.trim(),unit,price,cost,lowStock:roundQty(lowStock,unit),gst:Number(data.gst),expiryDate};
   const old=db.products.find(p=>p.id===ui.editId);
   if(old&&isKg(old.unit)!==isKg(unit)&&(old.stock>0||db.invoices.some(inv=>inv.lines?.some(line=>line.productId===old.id))))throw Error('To change between pieces and kilograms, create a new product or first clear stock for an unsold product.');
-  if(old)Object.assign(old,attrs);
-  else db.products.push({id:uid(),...attrs,stock:roundQty(stock,unit),createdAt:new Date().toISOString()});
-  const addToBill=ui.addAfterScan&&!old;const productId=old?.id||db.products.at(-1).id;
-  if(!save())return;closeModal();if(addToBill){navigate('billing');const added=db.products.find(p=>p.id===productId);if(added?.stock>0)ui.cart.push({productId,qty:firstCartQty(added)});render();toast(added?.stock>0?'Product created and added to bill.':'Product saved. Add stock before billing.')}else{render();toast(old?'Product updated.':'Product added to inventory.')}
+  // Stage product changes without mutating the original records. Roll back on storage failure.
+  const previousProducts=db.products;
+  const product=old?{...old,...attrs}:{id:uid(),...attrs,stock:roundQty(stock,unit),createdAt:new Date().toISOString()};
+  db.products=old?previousProducts.map(p=>p===old?product:p):[...previousProducts,product];
+  const addToBill=ui.addAfterScan&&!old;const productId=product.id;
+  if(!save()){db.products=previousProducts;return;}closeModal();if(addToBill){navigate('billing');const added=db.products.find(p=>p.id===productId);if(added?.stock>0)ui.cart.push({productId,qty:firstCartQty(added)});render();toast(added?.stock>0?'Product created and added to bill.':'Product saved. Add stock before billing.')}else{render();toast(old?'Product updated.':'Product added to inventory.')}
  }
  if(form.id==='customerForm'){
   const name=data.name.trim();if(!name)throw Error('Customer name is required.');
