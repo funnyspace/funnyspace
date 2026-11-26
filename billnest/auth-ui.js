@@ -239,6 +239,7 @@
   updateButton();
   if(layer.hidden)return;
   const user=account();
+  layer.classList.toggle('billnest-register-layer',!user&&mode==='signup');
   if(channel!=='email'){channel='email';resetFlow();}
   let content='';
   if(user){
@@ -258,29 +259,29 @@
     '<input id="billnestAuthContact" name="contact" type="email" inputmode="email" autocomplete="email"'+
     ' value="'+esc(contact)+'" maxlength="200" required '+(sent?'readonly':'')+'>'+
     (!sent?'<button type="submit" class="billnest-auth-primary" '+(busy?'disabled':'')+'>'+(mode==='signup'?'Send registration code':'Send login code')+'</button>':'')+'</form>'+
-    (sent?'<form id="billnestAuthVerify" class="billnest-auth-form"><label for="billnestAuthOtp">Verification code</label>'+
+    (sent?'<form id="billnestAuthVerify" class="billnest-auth-form">'+(mode==='signup'?'<p class="billnest-register-recipient">Code sent to <strong>'+esc(contact)+'</strong></p>':'')+'<label for="billnestAuthOtp">Verification code</label>'+
     '<input id="billnestAuthOtp" name="otp" type="text" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6,8}" maxlength="8" placeholder="Enter verification code" required>'+
     '<button type="submit" class="billnest-auth-primary" '+(busy?'disabled':'')+'>'+(mode==='signup'?'Verify and create account':'Verify and sign in')+'</button>'+
     '<p class="billnest-auth-resend-hint" role="status" aria-live="polite">Did not receive a code? You can resend it when the countdown ends.</p>'+
     '<div class="billnest-auth-otp-actions"><button type="button" data-auth-resend class="billnest-auth-secondary" '+(resendSeconds()>0||busy?'disabled':'')+'>'+(resendSeconds()>0?'Resend code in '+resendSeconds()+'s':'Resend code')+'</button>'+
     '<button type="button" data-auth-restart class="billnest-auth-secondary">Change '+(channel==='email'?'email':'number')+'</button></div></form>':'')+
     '<p class="billnest-auth-note">'+(mode==='signup'
-      ?'Your verification code is sent to your email. Your mobile number is saved as contact information, not verified by SMS.'
+      ?'Email OTP verification only. Mobile number is saved for contact.'
       :'Enter the email ID registered with your account. Sign in will not create another account.')+
-    ' An internet connection is required to receive a code.</p>';
+    (mode==='signup'?'':' An internet connection is required to receive a code.')+'</p>';
   }
   const footer=(!user&&cloud.hasAuthConfig?.())
    ?'<div class="billnest-auth-switch"><button type="button" data-auth-mode="'+(mode==='signin'?'signup':'signin')+'">'+
      (mode==='signin'?'Create account':'Already have an account? Sign in')+'</button></div>'
    :'';
-  layer.innerHTML='<div role="dialog" aria-modal="true" aria-labelledby="billnestAuthTitle" class="billnest-auth-panel">'+
+  layer.innerHTML='<div role="dialog" aria-modal="true" aria-labelledby="billnestAuthTitle" class="billnest-auth-panel'+(!user&&mode==='signup'?' billnest-register-panel':'')+'" data-auth-step="'+(sent?'verify':'entry')+'">'+
    (!locked?'<button type="button" class="billnest-auth-close" data-auth-close aria-label="Close">×</button>':'')+
    '<div class="billnest-auth-title"><div class="brand"><div class="brand-mark" aria-hidden="true"><img src="logo-mark.svg?v=24" width="47" height="53" alt=""></div><div><strong>BillNest</strong><small>INVENTORY &amp; BILLING</small></div></div><h2 id="billnestAuthTitle">'+(user?'My Account':mode==='signup'?'Create account':'Sign in')+'</h2></div>'+
    '<p class="billnest-auth-subtitle">'+(user?'Manage your account and billing data.':'Secure access to your business workspace')+'</p>'+
    '<div class="billnest-auth-content">'+content+'</div>'+footer+'</div>';
   messageBox();
  }
- function open(){previousFocus=document.activeElement;layer.hidden=false;document.body.classList.add('billnest-auth-open');render();if(sent)scheduleResend();(layer.querySelector('[data-auth-close]')||layer.querySelector('#billnestAuthContact')||layer.querySelector('button'))?.focus()}
+ function open(){previousFocus=document.activeElement;layer.hidden=false;document.body.classList.add('billnest-auth-open');render();if(sent)scheduleResend();(layer.querySelector('[data-auth-close]')||layer.querySelector(sent?'#billnestAuthOtp':mode==='signup'?'#billnestSignupName':'#billnestAuthContact')||layer.querySelector('button'))?.focus({preventScroll:true})}
  function close(){
   if(locked)return;
   layer.hidden=true;layer.innerHTML='';document.body.classList.remove('billnest-auth-open');
@@ -295,10 +296,10 @@
   if(target.matches('[data-auth-close]')){close();return}
   if(target.matches('[data-auth-use-email]')){channel='email';resetFlow();render();layer.querySelector('#billnestAuthContact')?.focus();return}
   if(target.matches('[data-auth-mode]')){
-   mode=target.dataset.authMode;channel='email';resetFlow();render();layer.querySelector('#billnestAuthContact')?.focus();return;
+   mode=target.dataset.authMode;channel='email';resetFlow();render();layer.querySelector(mode==='signup'?'#billnestSignupName':'#billnestAuthContact')?.focus({preventScroll:true});return;
   }
 
-  if(target.matches('[data-auth-restart]')){resetFlow();render();layer.querySelector('#billnestAuthContact')?.focus();return}
+  if(target.matches('[data-auth-restart]')){resetFlow();render();layer.querySelector(mode==='signup'?'#billnestSignupName':'#billnestAuthContact')?.focus({preventScroll:true});return}
   if(target.matches('[data-auth-settings]')){close();location.hash='#settings';return}
   if(target.matches('[data-auth-signout]')){
    if(confirm('Sign out of BillNest? Your local billing records will remain on this device.'))cloud.signOut();
