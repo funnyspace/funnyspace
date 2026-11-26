@@ -331,7 +331,7 @@
   async function sendOtp(channel, identifier, mode='signup', profile) {
     if(!config)throw Error('Account creation is not enabled yet. The site owner must configure Supabase authentication.');
     if(!['signup','signin'].includes(mode))throw Error('Choose Create account or Sign in.');
-    if(mode==='signup'&&channel!=='email')throw Error('Create an account using your email ID.');
+    if(channel!=='email')throw Error('Use your email ID to sign in or create an account.');
     const target=normalizeOtpContact(channel,identifier);
     let metadata;
     if(mode==='signup'){
@@ -350,7 +350,7 @@
   }
   async function verifyOtp(channel, identifier, code) {
     const target=normalizeOtpContact(channel,identifier),token=String(code||'').replace(/\s+/g,'');
-    if(!['email','phone'].includes(channel))throw Error('Select a sign-in method.');
+    if(channel!=='email')throw Error('Use email verification.');
     if(!/^\d{6,8}$/.test(token))throw Error('Enter the 6 to 8 digit verification code.');
     const result=await request('/auth/v1/verify',{method:'POST',body:channel==='email'?{email:target,token,type:'email'}:{phone:target,token,type:'sms'}});
     if(!result?.access_token||!result?.refresh_token||!result?.user?.id)throw Error('Could not complete sign-in.');
