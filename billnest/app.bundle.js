@@ -1188,7 +1188,7 @@ function renderModal(){let h='';
  const paymentAction=inv.payment==='UPI'&&invoiceOutstanding(inv,db.accounting.entries)>0?'<button class="btn btn-primary" data-action="record-receipt" data-id="'+e(inv.id)+'">✓ Record verified payment</button>':'';
  const preferred=printFormat(db.settings.printFormat);
  const buttons=[['a4','Print A4 / PDF','print-invoice-a4'],['thermal58','Print 58 mm','print-invoice-58'],['thermal80','Print 80 mm','print-invoice-80']].map(([format,label,action])=>`<button type="button" class="btn ${format===preferred?'btn-primary':''}" data-action="${action}" data-id="${e(inv.id)}">▤ ${label}</button>`).join('');
- h=shellModal(`Invoice ${e(inv.number)}`,`${formatDate(inv.date)} · ${inv.paid?'Paid':'Unpaid'}`,`<div class="modal-body">${invoicePaper(inv)}</div>`,`<div class="bn-invoice-print-actions" aria-label="Print invoice">${buttons}</div>${paymentAction}<button class="btn" data-action="close-modal">Close</button>`,'invoice-modal');
+ h=shellModal(`Invoice ${e(inv.number)}`,`${formatDate(inv.date)} · ${inv.paid?'Paid':'Unpaid'}`,`<div class="modal-body">${invoicePaper(inv)}</div>`,`<div class="bn-invoice-print-actions" aria-label="Print invoice">${buttons}<button type="button" class="btn bn-bluetooth-print" data-action="bluetooth-print-58" data-id="${e(inv.id)}" ${bnBluetoothBusy?'disabled':''}>Bluetooth 58 mm</button><button type="button" class="btn bn-bluetooth-print" data-action="bluetooth-print-80" data-id="${e(inv.id)}" ${bnBluetoothBusy?'disabled':''}>Bluetooth 80 mm</button><p class="bn-bluetooth-hint" role="status" data-bn-bluetooth-status>Direct Bluetooth for compatible BLE ESC/POS printers. Other print buttons use the system printer.</p></div>${paymentAction}<button class="btn" data-action="close-modal">Close</button>`,'invoice-modal');
  }
  $('#modalLayer').innerHTML=h;
  if(ui.modal==='invoice')drawInvoiceUpiQr($('#modalLayer'));
@@ -1230,6 +1230,107 @@ const PRINT_FORMATS=Object.freeze({a4:'A4 invoice / PDF',thermal58:'58 mm therma
 const printFormat=value=>Object.hasOwn(PRINT_FORMATS,value)?value:'a4';
 const printOptions=value=>Object.entries(PRINT_FORMATS).map(([key,label])=>`<option value="${key}" ${printFormat(value)===key?'selected':''}>${label}</option>`).join('');
 const printHint=format=>format==='a4'?'Select A4 in the print dialog.':`Select your thermal printer, ${format==='thermal58'?'58':'80'} mm roll paper, 100% scale and no margins or headers/footers in the print dialog. Printer must already be installed or paired with your device.`;
+
+const BN_BLE_PROFILES=Object.freeze([
+ {service:'000018f0-0000-1000-8000-00805f9b34fb',characteristic:'00002af1-0000-1000-8000-00805f9b34fb'},
+ {service:'0000ffe0-0000-1000-8000-00805f9b34fb',characteristic:'0000ffe1-0000-1000-8000-00805f9b34fb'},
+ {service:'0000ff00-0000-1000-8000-00805f9b34fb',characteristic:'0000ff02-0000-1000-8000-00805f9b34fb'}
+]);
+let bnBluetoothBusy=false;
+const bnWait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+function bnBluetoothStatus(message,isError=false){
+ const el=document.querySelector('[data-bn-bluetooth-status]');
+ if(el){el.textContent=message;el.classList.toggle('bn-bluetooth-error',isError)}
+ else toast(message,isError?'error':'ok');
+}
+function bnBluetoothButtons(disabled){document.querySelectorAll('.bn-bluetooth-print').forEach(b=>{b.disabled=disabled});}
+function bnPackRaster(rgba,width,height){
+ if(!Number.isInteger(width)||width<=0||width%8!==0||width>576||!Number.isInteger(height)||height<=0||height>128||rgba.length!==width*height*4)throw Error('Invalid receipt bitmap.');
+ const stride=width/8,out=new Uint8Array(8+stride*height);
+ out.set([0x1d,0x76,0x30,0,stride&255,stride>>8,height&255,height>>8]);
+ for(let y=0;y<height;y++)for(let x=0;x<width;x++){const i=(y*width+x)*4;const lum=(rgba[i]*299+rgba[i+1]*587+rgba[i+2]*114)/1000;if(rgba[i+3]>127&&lum<160)out[8+y*stride+(x>>3)]|=0x80>>(x&7);}
+ return out;
+}
+function bnReceiptBitmap(inv,format){
+ const width=format==='thermal80'?576:384,pad=12,usable=width-2*pad;
+ const canvas=document.createElement('canvas');canvas.width=width;canvas.height=1;
+ const measure=canvas.getContext('2d');if(!measure)throw Error('Receipt image generation unavailable.');
+ const b=inv.business||db.settings,customer=inv.customer||{},due=invoiceOutstanding(inv,db.accounting.entries),rows=[];
+ const font=(size,bold)=>(bold?'bold ':'')+size+'px Arial, sans-serif';
+ const clean=value=>String(value??'').replace(/[\u0000-\u0008\u000b-\u001f\u007f]/g,' ').slice(0,4000);
+ let y=pad;
+ function line(value,{size=22,bold=false,center=false}={}){
+  measure.font=font(size,bold);const text=clean(value);
+  for(const paragraph of text.split(/\r?\n/)){
+   let part='';
+   for(const ch of Array.from(paragraph)){if(part&&measure.measureText(part+ch).width>usable){rows.push({text:part,y,size,bold,center});y+=size+8;part='';}part+=ch;}
+   rows.push({text:part,y,size,bold,center});y+=size+8;
+  }
+  if(y>14000)throw Error('Receipt is too long for direct Bluetooth. Use system printing instead.');
+ }
+ function rule(){rows.push({rule:true,y:y+4});y+=14;}
+ function pair(label,value,opts){line(label+': '+value,opts);}
+ line(b.businessName||'My Store',{size:30,bold:true,center:true});
+ for(const value of [b.owner,b.address,b.state,b.phone,b.email])if(value)line(value,{size:20,center:true});
+ if(b.gstin)line('GSTIN: '+b.gstin,{size:20,center:true});
+ line(inv.demo?'SAMPLE - NOT FOR USE':'INVOICE',{size:24,bold:true,center:true});rule();
+ pair('Invoice',inv.number);pair('Date',formatDate(inv.date));pair('Payment',inv.payment);
+ pair('Status',due===0?'Paid':due===inv.total?'Unpaid':'Part paid');pair('Bill to',customer.name||'Walk-in customer');
+ for(const value of [customer.address,customer.state,customer.phone])if(value)line(value,{size:20});
+ if(customer.gstin)pair('Customer GSTIN',customer.gstin,{size:20});rule();
+ if(!Array.isArray(inv.lines)||inv.lines.length>300)throw Error('Receipt is too long for direct Bluetooth. Use system printing instead.');
+ for(const item of inv.lines){line(item.name,{bold:true});if(item.sku)line(item.sku,{size:18});line(item.qty+' '+item.unit+' × '+money(item.unitPrice)+' | '+money(item.total));line('GST '+pct(item.gst),{size:18});}
+ rule();pair(inv.inclusive?'Subtotal incl. GST':'Subtotal',money(inv.list));if(inv.discount)pair('Discount ('+inv.discountPercent+'%)','- '+money(inv.discount));pair('Taxable amount',money(inv.taxable));
+ if(inv.taxType==='intra'){pair('CGST',money(inv.cgst));pair('SGST',money(inv.sgst));}else if(inv.taxType==='inter')pair('IGST',money(inv.igst));else pair('GST',money(inv.tax));
+ rule();pair('TOTAL',money(inv.total),{size:28,bold:true});if(due>0)pair('Balance due',money(due),{bold:true});
+ if(inv.payment==='UPI'&&due>0&&isValidUpiId(String(b.upiId||'').trim())){
+  if(typeof globalThis.QRCode!=='function')throw Error('UPI QR renderer unavailable. Use system printing.');
+  const uri=buildUpiIntent({upiId:String(b.upiId).trim(),payeeName:b.businessName||'My Store',amountPaise:due,reference:'BN'+String(inv.id||'').replace(/[^A-Za-z0-9]/g,''),invoiceNumber:inv.number});
+  rule();line('Scan to pay '+money(due),{bold:true,center:true});const target=document.createElement('div');
+  new globalThis.QRCode(target,{text:uri,width:224,height:224,colorDark:'#000000',colorLight:'#ffffff',correctLevel:globalThis.QRCode.CorrectLevel.M});
+  const qr=target.querySelector('canvas');if(!qr)throw Error('UPI QR unavailable. Use system printing.');
+  rows.push({qr,y});y+=256;line('UPI: '+b.upiId,{size:18,center:true});line('Verify receipt before marking paid.',{size:18,center:true});
+ }
+ if(inv.notes){rule();line('Note',{bold:true});line(inv.notes,{size:20});}
+ if(String(b.termsAndConditions||'').trim()){rule();line('Terms & Conditions',{bold:true});line(b.termsAndConditions,{size:18});}
+ rule();for(const footer of [b.invoiceThankYou??'Thank you for your business!',b.invoiceFooterNote??'Invoice generated with BillNest'])if(String(footer).trim())line(footer,{size:20,center:true});
+ if(y+pad>14000)throw Error('Receipt is too long for direct Bluetooth. Use system printing instead.');
+ canvas.height=y+pad;const ctx=canvas.getContext('2d',{willReadFrequently:true});ctx.fillStyle='#fff';ctx.fillRect(0,0,width,canvas.height);ctx.fillStyle='#000';ctx.textBaseline='top';
+ for(const r of rows){if(r.rule){ctx.fillRect(pad,r.y,usable,2);continue}if(r.qr){ctx.imageSmoothingEnabled=false;ctx.drawImage(r.qr,(width-224)/2,r.y+16,224,224);continue}ctx.font=font(r.size,r.bold);ctx.textAlign=r.center?'center':'left';ctx.fillText(r.text,r.center?width/2:pad,r.y);}
+ const frames=[new Uint8Array([0x1b,0x40])];
+ for(let top=0;top<canvas.height;top+=128){const h=Math.min(128,canvas.height-top);frames.push(bnPackRaster(ctx.getImageData(0,top,width,h).data,width,h));}
+ frames.push(new Uint8Array([10,10,10]));return frames;
+}
+async function bnFindPrinterChannel(server){
+ for(const profile of BN_BLE_PROFILES){try{const service=await server.getPrimaryService(profile.service),ch=await service.getCharacteristic(profile.characteristic);if((ch.properties.write&&typeof ch.writeValueWithResponse==='function')||(ch.properties.writeWithoutResponse&&typeof ch.writeValueWithoutResponse==='function'))return ch;}catch{}}
+ throw Error('This printer does not expose a supported BLE printing service. Use the system thermal print option.');
+}
+async function bnWriteReceipt(channel,frames,onStart,delay=bnWait){
+ const acknowledged=channel.properties.write&&typeof channel.writeValueWithResponse==='function';
+ const writer=acknowledged?channel.writeValueWithResponse.bind(channel):channel.writeValueWithoutResponse.bind(channel);
+ for(const frame of frames)for(let off=0;off<frame.length;off+=20){onStart();await writer(frame.subarray(off,off+20));if(!acknowledged)await delay(12);}
+}
+async function bluetoothPrint(inv,format){
+ if(bnBluetoothBusy){bnBluetoothStatus('A Bluetooth print job is already running.');return;}
+ if(!globalThis.isSecureContext||typeof navigator.bluetooth?.requestDevice!=='function'){bnBluetoothStatus('Direct Bluetooth is not supported here. Pair your printer in system settings and use Print 58 mm or Print 80 mm.',true);return;}
+ bnBluetoothBusy=true;bnBluetoothButtons(true);let device,started=false;
+ try{
+  bnBluetoothStatus('Select your compatible thermal printer…');
+  device=await navigator.bluetooth.requestDevice({acceptAllDevices:true,optionalServices:BN_BLE_PROFILES.map(p=>p.service)});
+  if(!device?.gatt)throw Error('The selected device has no Bluetooth LE connection.');
+  bnBluetoothStatus('Connecting to '+(device.name||'printer')+'…');
+  const server=await device.gatt.connect(),channel=await bnFindPrinterChannel(server);
+  const frames=bnReceiptBitmap(inv,format);
+  bnBluetoothStatus('Sending receipt. Keep the printer nearby and do not close this page.');
+  await bnWriteReceipt(channel,frames,()=>{started=true});
+  await bnWait(500);bnBluetoothStatus('Receipt data sent. Check the printer output before printing again.');
+ }catch(err){
+  if(started)bnBluetoothStatus('Bluetooth printing interrupted. The receipt may have printed partially. Check the paper before retrying or use system printing.',true);
+  else if(err?.name==='NotFoundError')bnBluetoothStatus('No printer selected. You can try again or use system printing.');
+  else bnBluetoothStatus('Bluetooth printing unavailable: '+String(err?.message||'Connection failed').slice(0,180),true);
+ }finally{try{if(device?.gatt?.connected)device.gatt.disconnect()}catch{}bnBluetoothBusy=false;bnBluetoothButtons(false);}
+}
+
 function thermalReceipt(inv,format){
  const b=inv.business||db.settings,c=inv.customer||{},due=invoiceOutstanding(inv,db.accounting.entries),status=due===0?'Paid':due===inv.total?'Unpaid':'Part paid';
  const pair=(name,value)=>`<div class="bn-thermal-pair"><span>${e(name)}</span><strong>${e(value)}</strong></div>`;
@@ -1317,6 +1418,7 @@ function handleAction(action,id){switch(action){
  case 'save-invoice':saveInvoice();break;
  case 'view-invoice':ui.invoiceId=id;openModal('invoice');break;
  case 'print-invoice':case 'print-invoice-a4':case 'print-invoice-58':case 'print-invoice-80':{const inv=db.invoices.find(i=>i.id===id);if(!inv)return;const format=action==='print-invoice-a4'?'a4':action==='print-invoice-58'?'thermal58':action==='print-invoice-80'?'thermal80':db.settings.printFormat;printDocument(inv,format);break}
+ case 'bluetooth-print-58':case 'bluetooth-print-80':{const inv=db.invoices.find(i=>i.id===id);if(inv)void bluetoothPrint(inv,action==='bluetooth-print-58'?'thermal58':'thermal80');break}
  case 'test-printer':printDocument(printerTestInvoice(),$('#printFormat')?.value??db.settings.printFormat);break;
  case 'mark-paid':openModal('receipt',id);break
  case 'export-products':exportProducts();break;
