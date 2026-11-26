@@ -1,8 +1,8 @@
 /* BillNest installable offline app shell. No cloud or customer responses are cached. */
-const CACHE = 'billnest-shell-v79';
+const CACHE = 'billnest-shell-v80';
 const SHELL = [
- './','./index.html','./styles.css?v=51','./auth-ui.css?v=12','./shop-database.css?v=4','./language-ui.css?v=1','./app.bundle.js?v=46',
- './auth-config.js?v=6','./cloud-backup.js?v=39','./shop-database.js?v=6','./auth-ui.js?v=35','./i18n.js?v=3','./qrcode.min.js?v=1','./manifest.webmanifest',
+ './','./index.html','./styles.css?v=52','./auth-ui.css?v=12','./shop-database.css?v=4','./language-ui.css?v=1','./app.bundle.js?v=47',
+ './auth-config.js?v=6','./cloud-backup.js?v=39','./shop-database.js?v=6','./auth-ui.js?v=36','./i18n.js?v=3','./qrcode.min.js?v=1','./manifest.webmanifest',
  './logo-mark.svg?v=24','./favicon.svg?v=24','./install-app.js?v=27',
  './icons/icon-192.png','./icons/icon-512.png','./icons/icon-maskable-512.png'
 ];
