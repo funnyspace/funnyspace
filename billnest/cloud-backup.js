@@ -68,7 +68,7 @@
   let otpTarget = '';
   let otpChannel = '';
   const workspaceKey = () => session?.user?.id ? 'billnest-workspace-v1-user-'+session.user.id : 'billnest-workspace-v1';
-  const accountInfo = () => config && session?.access_token && session?.user?.id ? {id:session.user.id,email:session.user.email||'',phone:session.user.phone||''} : null;
+  const accountInfo = () => config && session?.access_token && session?.user?.id ? {id:session.user.id,email:session.user.email||'',phone:session.user.phone||'',full_name:typeof session.user.user_metadata?.full_name==='string'?session.user.user_metadata.full_name.slice(0,100):'',contact_mobile:typeof session.user.user_metadata?.contact_mobile==='string'?session.user.user_metadata.contact_mobile.slice(0,24):''} : null;
   let refreshing = null;
   let lastSync = '';
   let authGeneration = 0;
@@ -328,13 +328,21 @@
       return false;
     }
   }
-  async function sendOtp(channel, identifier, mode='signup') {
+  async function sendOtp(channel, identifier, mode='signup', profile) {
     if(!config)throw Error('Account creation is not enabled yet. The site owner must configure Supabase authentication.');
     if(!['signup','signin'].includes(mode))throw Error('Choose Create account or Sign in.');
     if(mode==='signup'&&channel!=='email')throw Error('Create an account using your email ID.');
     const target=normalizeOtpContact(channel,identifier);
+    let metadata;
+    if(mode==='signup'){
+      const name=String(profile?.full_name||'').trim();
+      if(!name||name.length>100)throw Error('Enter your full name (up to 100 characters).');
+      if(String(profile?.contact_mobile||'').length>24)throw Error('Enter a valid mobile number.');
+      const mobile=normalizeOtpContact('phone',profile?.contact_mobile);
+      metadata={full_name:name,contact_mobile:mobile};
+    }
     await request('/auth/v1/otp',{method:'POST',body:channel==='email'
-      ? {email:target,create_user:mode==='signup'}
+      ? {email:target,create_user:mode==='signup',...(metadata?{data:metadata}:{})}
       : {phone:target,create_user:mode==='signup',channel:'sms'}});
     otpChannel=channel;otpTarget=target;
     setMessage(channel==='email'?'Email code requested. Check inbox and spam. The email template must contain a numeric OTP.':'SMS code requested. Check your messages; delivery depends on the configured SMS provider.','local');
