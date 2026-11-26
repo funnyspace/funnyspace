@@ -134,3 +134,27 @@ body.billnest-auth-open{overflow:hidden}
 .billnest-auth-panel .billnest-auth-switch{border-top:1px solid #344960;margin-top:22px;padding-top:12px}
 @media(max-width:700px){.billnest-auth-panel{padding:26px 22px 22px;border-radius:20px}}
 @media(max-width:390px){.billnest-auth-panel{padding:24px 17px 20px}.billnest-auth-panel .billnest-auth-title .brand strong{font-size:28px}.billnest-auth-panel .billnest-auth-title h2{font-size:22px}}
+
+/* Compact registration: fit the entire form on normal phone viewports.
+   Only the outer layer may scroll when the keyboard or a very short viewport makes it necessary. */
+.billnest-register-layer{align-items:flex-start;justify-content:center;padding:12px;overflow:auto;overscroll-behavior:contain}
+.billnest-auth-panel.billnest-register-panel{width:min(100%,440px);flex:0 0 auto;margin:auto 0;min-height:0;max-height:none;overflow:visible;padding:20px 24px 16px;border-radius:20px}
+.billnest-register-panel .billnest-auth-title{gap:10px;margin:0 0 4px}
+.billnest-register-panel .billnest-auth-title .brand-mark{width:36px;height:41px;flex-basis:36px}
+.billnest-register-panel .billnest-auth-title .brand strong{font-size:27px}
+.billnest-register-panel .billnest-auth-title .brand small{font-size:8px;margin-top:3px}
+.billnest-register-panel .billnest-auth-title h2{font-size:23px;line-height:1.2}
+.billnest-register-panel .billnest-auth-subtitle{font-size:12px;line-height:1.4;margin:0 0 15px}
+.billnest-register-panel .billnest-auth-form{gap:6px}
+.billnest-register-panel .billnest-auth-form label{font-size:13px;line-height:1.35;margin-top:4px}
+.billnest-register-panel .billnest-auth-form input{min-height:44px;height:44px;padding:9px 12px;border-radius:10px;font-size:16px}
+.billnest-register-panel .billnest-auth-primary{min-height:44px;padding:10px 12px;margin-top:7px;border-radius:10px}
+.billnest-register-panel .billnest-auth-note{font-size:12px;line-height:1.4;margin:10px 0 0}
+.billnest-register-panel .billnest-auth-switch{margin-top:12px;padding-top:6px}
+.billnest-register-panel .billnest-auth-switch button{padding:6px;font-size:13px;min-height:36px}
+.billnest-register-panel .billnest-auth-message{margin-top:8px;padding:8px;font-size:12px}
+.billnest-register-panel[data-auth-step="verify"] #billnestAuthSend{display:none}
+.billnest-register-recipient{margin:0 0 6px;font-size:13px;line-height:1.4;color:#b9c9dd;overflow-wrap:anywhere}
+.billnest-register-recipient strong{color:#f8fafc}
+@media(max-width:390px){.billnest-auth-panel.billnest-register-panel{padding:18px 16px 14px}.billnest-register-panel .billnest-auth-title h2{font-size:22px}}
+@media(max-height:580px){.billnest-register-layer{padding:8px}.billnest-auth-panel.billnest-register-panel{padding-top:14px;padding-bottom:10px}.billnest-register-panel .billnest-auth-title{gap:6px}.billnest-register-panel .billnest-auth-subtitle{margin-bottom:9px}.billnest-register-panel .billnest-auth-form{gap:5px}.billnest-register-panel .billnest-auth-note{margin-top:8px}.billnest-register-panel .billnest-auth-switch{margin-top:8px;padding-top:3px}}
