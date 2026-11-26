@@ -17,6 +17,7 @@
  btn.className='billnest-account-btn';
  btn.id='billnestAccountBtn';
  top.prepend(btn);
+ let signupName='',signupMobile='';
  let mode='signin',channel='email',contact='',sent=false,busy=false,notice='',noticeError=false,previousFocus=null,resendAfter=0,resendTimer=null;
  const account=()=>cloud.currentAccount?.()||null;
  const app=document.getElementById('app');
@@ -214,7 +215,7 @@
  }
  function message(value,error=false){notice=String(value||'');noticeError=error;messageBox()}
  function resetFlow(){
-  contact='';sent=false;resendAfter=0;notice='';noticeError=false;
+  contact='';signupName='';signupMobile='';sent=false;resendAfter=0;notice='';noticeError=false;
   if(resendTimer){clearTimeout(resendTimer);resendTimer=null}
  }
  function resendSeconds(){return Math.max(0,Math.ceil((resendAfter-Date.now())/1000))}
@@ -241,7 +242,7 @@
   if(mode==='signup'&&channel!=='email'){channel='email';resetFlow();}
   let content='';
   if(user){
-   content='<div class="billnest-auth-user"><strong class="billnest-auth-status"><span aria-hidden="true"></span>Signed in</strong><div class="billnest-auth-identity">'+esc(user.email||user.phone||'BillNest user')+'</div></div>'+
+   content='<div class="billnest-auth-user"><strong class="billnest-auth-status"><span aria-hidden="true"></span>Signed in</strong><div class="billnest-auth-identity">'+esc(user.full_name||user.email||user.phone||'BillNest user')+'</div>'+(user.full_name&&user.email?'<p class="billnest-auth-note">'+esc(user.email)+'</p>':'')+(user.contact_mobile?'<p class="billnest-auth-note">Mobile: '+esc(user.contact_mobile)+' (not verified)</p>':'')+'</div>'+
     (entitlement?'<p class="billnest-auth-note">'+(entitlement.status==='trial'?remainingDays()+' days remaining in your free trial':entitlement.status==='active'?'Premium subscription active':'Subscription required')+'</p>':'')+
     '<p class="billnest-auth-note">Your shop data stays separate from other accounts on this device. Offline records are saved locally; cloud backup is available in Settings.</p>'+
     (importAvailable()?'<button type="button" class="billnest-auth-primary" data-auth-import>Copy existing offline store into this account</button><p class="billnest-auth-note">Your original offline store will not be deleted.</p>':'')+
@@ -255,6 +256,7 @@
     '<button type="button" role="tab" data-auth-tab="email" aria-selected="'+(channel==='email')+'">Email ID</button>'+
     '<button type="button" role="tab" data-auth-tab="phone" aria-selected="'+(channel==='phone')+'">Mobile number</button></div>')+
     '<form id="billnestAuthSend" class="billnest-auth-form">'+
+    (mode==='signup'?'<label for="billnestSignupName">Full name</label><input id="billnestSignupName" name="full_name" type="text" autocomplete="name" maxlength="100" required value="'+esc(signupName)+'" '+(sent?'readonly':'')+'><label for="billnestSignupMobile">Mobile number</label><input id="billnestSignupMobile" name="contact_mobile" type="tel" inputmode="tel" autocomplete="tel" maxlength="24" required value="'+esc(signupMobile)+'" '+(sent?'readonly':'')+'>':'')+
     '<label for="billnestAuthContact">'+(channel==='email'?'Email ID':'Mobile number')+'</label>'+
     '<input id="billnestAuthContact" name="contact" '+(channel==='email'?'type="email" inputmode="email" autocomplete="email"':'type="tel" inputmode="tel" autocomplete="tel"')+
     ' value="'+esc(contact)+'" maxlength="200" required '+(sent?'readonly':'')+'>'+
@@ -266,7 +268,7 @@
     '<div class="billnest-auth-otp-actions"><button type="button" data-auth-resend class="billnest-auth-secondary" '+(resendSeconds()>0||busy?'disabled':'')+'>'+(resendSeconds()>0?'Resend code in '+resendSeconds()+'s':'Resend code')+'</button>'+
     '<button type="button" data-auth-restart class="billnest-auth-secondary">Change '+(channel==='email'?'email':'number')+'</button></div></form>':'')+
     '<p class="billnest-auth-note">'+(mode==='signup'
-      ?'A new account is created after your email is verified. No password is required.'
+      ?'Your verification code is sent to your email. Your mobile number is saved as contact information, not verified by SMS.'
       :'Enter the email ID or mobile number registered with your account. Sign in will not create another account.')+
     ' An internet connection is required to receive a code.</p>';
   }
@@ -321,7 +323,7 @@
   if(target.matches('[data-auth-resend]')){
    if(!sent||resendSeconds()>0||(mode==='signup'&&channel!=='email'))return;
    busy=true;updateResendState();
-   cloud.sendOtp(channel,contact,mode).then(result=>{
+   cloud.sendOtp(channel,contact,mode,mode==='signup'?{full_name:signupName,contact_mobile:signupMobile}:undefined).then(result=>{
     contact=result.contact;resendAfter=Date.now()+60000;
     message('Another code was requested. Check your '+(channel==='email'?'email inbox and spam folder':'mobile SMS')+'.');
    }).catch(err=>{
@@ -341,8 +343,9 @@
   if(submit)submit.disabled=true;
   try{
    if(form.id==='billnestAuthSend'){
-    const raw=String(new FormData(form).get('contact')||'').trim();
-    const result=await cloud.sendOtp(channel,raw,mode);
+    const data=new FormData(form),raw=String(data.get('contact')||'').trim();
+    if(mode==='signup'){signupName=String(data.get('full_name')||'').trim();signupMobile=String(data.get('contact_mobile')||'').trim();}
+    const result=await cloud.sendOtp(channel,raw,mode,mode==='signup'?{full_name:signupName,contact_mobile:signupMobile}:undefined);
     contact=result.contact;sent=true;resendAfter=Date.now()+60000;
     render();
     message('Code request accepted. Check your '+(channel==='email'?'email inbox and spam folder':'mobile SMS')+'. If nothing arrives, use Resend code after the countdown.');
