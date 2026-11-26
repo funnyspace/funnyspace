@@ -11,7 +11,7 @@
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="BillNest">
-  <link rel="stylesheet" href="styles.css?v=54">
+  <link rel="stylesheet" href="styles.css?v=55">
   <link rel="stylesheet" href="auth-ui.css?v=13">
   <link rel="stylesheet" href="shop-database.css?v=5">
   <link rel="stylesheet" href="language-ui.css?v=1">
@@ -36,7 +36,8 @@
     <aside class="sidebar" aria-label="Main navigation">
       <div class="brand"><div class="brand-mark" aria-hidden="true"><img src="logo-mark.svg?v=24" width="47" height="53" alt=""></div><div><strong>billnest<span class="brand-period">.</span></strong><small>INVENTORY + BILLING</small></div></div>
       <p class="sidebar-caption">WORKSPACE</p>
-      <nav id="navigation"></nav>
+      <nav id="navigation" aria-label="Workspace pages"></nav>
+      <nav id="settingsNavigation" aria-label="Settings"></nav>
       <div class="sidebar-bottom"><div class="store-avatar" id="storeAvatar">BN</div><div class="store-meta"><b id="storeName">My Store</b><small>Local workspace</small></div><button type="button" class="icon-button sidebar-settings" data-go="settings" title="Store settings" aria-label="Store settings">⚙</button></div>
     </aside>
     <div class="main-shell">
@@ -57,7 +58,7 @@
   <script defer src="auth-config.js?v=6"></script>
   <script defer src="cloud-backup.js?v=40"></script>
   <script defer src="shop-database.js?v=8"></script>
-  <script defer src="auth-ui.js?v=42"></script>
+  <script defer src="auth-ui.js?v=43"></script>
   <!-- The authentication gate loads the workspace and translations only after verification. -->
 </body>
 </html>
