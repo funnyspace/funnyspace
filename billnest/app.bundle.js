@@ -976,7 +976,13 @@ async function toggleScannerTorch(){
  else {await setScannerTorch(false);scannerStatus('Automatic light detection enabled. Scanning continues.');}
 }
 
-function save(){try{localStorage.setItem(STORE_KEY,JSON.stringify(db));globalThis.BillNestCloud?.onSave?.();return true}catch(err){console.error(err);toast('Could not save. Browser storage is unavailable or full. Export a backup.','error');return false}}
+function save(){
+ try{localStorage.setItem(STORE_KEY,JSON.stringify(db));}
+ catch(err){console.error(err);toast('Could not save. Browser storage is unavailable or full. Export a backup.','error');return false;}
+ // Local commit has succeeded. A cloud notification error must not trigger a false local rollback.
+ try{globalThis.BillNestCloud?.onSave?.();}catch(err){console.warn('Local data saved; cloud backup notification failed.',err);}
+ return true;
+}
 function toast(message,type='ok'){const node=$('#toastLayer');node.innerHTML=`<div class="toast ${type==='error'?'error':''}">${e(message)}</div>`;clearTimeout(toastTimer);toastTimer=setTimeout(()=>node.innerHTML='',4300)}
 const num = v => Number(v)||0;
 const pct = n => `${Number(n||0)}%`;
@@ -1387,7 +1393,12 @@ function handleAction(action,id){switch(action){
  case 'delete-product':{
   const p=db.products.find(x=>x.id===ui.editId);if(!p)return;
   if(!confirm(`Delete ${p.name} from active inventory? Existing invoices will be preserved.`))return;
-  db.products=db.products.filter(x=>x.id!==p.id);ui.cart=ui.cart.filter(x=>x.productId!==p.id);save();closeModal();render();toast('Product removed.');break;
+  const previousProducts=db.products;
+  db.products=previousProducts.filter(x=>x.id!==p.id);
+  if(!save()){db.products=previousProducts;break;}
+  // Only change the cart and close the editor after the deletion is durable.
+  ui.cart=ui.cart.filter(x=>x.productId!==p.id);
+  closeModal();render();toast('Product removed.');break;
  }
  case 'stock':openModal('stock',id);break;
  case 'refill-stock':openModal('refill',id);break;
@@ -1488,8 +1499,12 @@ function handleForm(form){const data=Object.fromEntries(new FormData(form));try{
   const name=data.name.trim();if(!name)throw Error('Customer name is required.');
   const attrs={name,phone:data.phone.trim(),email:data.email.trim(),gstin:data.gstin.trim().toUpperCase(),address:data.address.trim(),state:data.state};
   const old=db.customers.find(x=>x.id===ui.editId);
-  if(old)Object.assign(old,attrs);else {const item={id:uid(),...attrs};db.customers.push(item);if(ui.page==='billing')ui.billingCustomer=item.id}
-  save();closeModal();render();toast(old?'Customer updated.':'Customer added.');
+  const previousCustomers=db.customers;
+  const item=old?{...old,...attrs}:{id:uid(),...attrs};
+  db.customers=old?previousCustomers.map(x=>x===old?item:x):[...previousCustomers,item];
+  if(!save()){db.customers=previousCustomers;return;}
+  if(!old&&ui.page==='billing')ui.billingCustomer=item.id;
+  closeModal();render();toast(old?'Customer updated.':'Customer added.');
  }
  if(form.id==='refillForm'){
   const p=db.products.find(x=>x.id===ui.editId);if(!p)throw Error('Product not found.');
