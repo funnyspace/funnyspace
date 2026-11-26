@@ -1009,7 +1009,11 @@ const sectionHeader = (title,sub='',actions='') => `<div class="page-intro"><div
 const reportDateRange = () => ui.reportRange==='all' ? '0001-01-01' : shiftDay(today(),-Number(ui.reportRange)+1);
 function showDemoBanner(){return db.demo?`<div class="banner orange"><div><strong>✦ You are exploring a demo workspace</strong><p>Sample products and invoices are only examples. Start fresh before using this for your real store.</p></div><button class="btn btn-sm" data-action="reset-data">Start with an empty store</button></div>`:''}
 function render(){
- $('#navigation').innerHTML=PAGES.map(([key,label,icon])=>`<button type="button" data-go="${key}" class="nav-item ${ui.page===key?'active':''} ${key==='settings'?'nav-spacer':''}" ${ui.page===key?'aria-current="page"':''}><span class="nav-icon nav-icon-3d">${navIcon(key)}</span><span>${label}</span></button>`).join('');
+ const settingsNav=$('#settingsNavigation');
+ const navButton=([key,label])=>`<button type="button" data-go="${key}" class="nav-item ${ui.page===key?'active':''}" ${ui.page===key?'aria-current="page"':''}><span class="nav-icon nav-icon-3d">${navIcon(key)}</span><span>${label}</span></button>`;
+ // Keep Settings outside the scrollable workspace menu; support older cached HTML.
+ $('#navigation').innerHTML=(settingsNav?PAGES.filter(([key])=>key!=='settings'):PAGES).map(navButton).join('');
+ if(settingsNav)settingsNav.innerHTML=PAGES.filter(([key])=>key==='settings').map(navButton).join('');
  const mobileNav=$('#mobileBottomNav');
  if(mobileNav)mobileNav.innerHTML=['dashboard','billing','inventory','sales','accounting'].map(key=>{const [name,label,icon]=PAGES.find(p=>p[0]===key);const tabLabel=key==='sales'?'Invoices':key==='accounting'?'Accounts':label;return `<button type="button" data-go="${name}" class="mobile-tab ${ui.page===name?'active':''}" ${ui.page===name?'aria-current="page"':''}><span class="mobile-tab-icon nav-icon-3d">${navIcon(name)}</span><span>${tabLabel}</span></button>`}).join('');
  $('#pageTitle').textContent=PAGES.find(p=>p[0]===ui.page)?.[1]||'Overview';
