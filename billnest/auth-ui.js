@@ -237,8 +237,8 @@
   updateResendState();
   if(resendSeconds()>0)resendTimer=setTimeout(scheduleResend,1000);
  }
- const socialIcons={google:'<svg viewBox="0 0 48 48" width="19" height="19" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.2 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5Z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.95-2.24 5.46-4.76 7.16l7.73 6C44.42 38 46.98 31.85 46.98 24.55Z"/><path fill="#FBBC05" d="M10.53 28.59A14.4 14.4 0 0 1 9.75 24c0-1.59.27-3.12.78-4.59l-7.98-6.19A23.9 23.9 0 0 0 0 24c0 3.87.93 7.53 2.56 10.78l7.97-6.19Z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.91-5.82l-7.73-6c-2.15 1.45-4.92 2.31-8.18 2.31-6.26 0-11.57-4.22-13.47-9.9l-7.97 6.19C6.51 42.62 14.62 48 24 48Z"/></svg>',apple:'<svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true" fill="currentColor"><path d="M17.05 12.31c.03 3.1 2.72 4.13 2.75 4.14-.02.07-.43 1.47-1.41 2.91-.85 1.24-1.73 2.47-3.11 2.5-1.36.03-1.8-.81-3.36-.81-1.57 0-2.06.78-3.35.84-1.33.05-2.34-1.34-3.2-2.57-1.75-2.53-3.08-7.15-1.29-10.27a4.97 4.97 0 0 1 4.22-2.56c1.31-.02 2.55.89 3.36.89.8 0 2.31-1.1 3.9-.94.67.03 2.56.27 3.77 2.04-.1.06-2.25 1.31-2.28 3.83ZM14.52 4.77c.71-.87 1.18-2.06 1.05-3.25-1.03.04-2.27.69-3.01 1.55-.66.76-1.24 1.97-1.08 3.13 1.15.09 2.33-.57 3.04-1.43Z"/></svg>'};
- function socialMarkup(){return '<div class="billnest-social-divider"><span>or</span></div><div class="billnest-social-options">'+['google','apple'].map(provider=>'<button type="button" class="billnest-social-button" data-auth-social="'+provider+'" '+(busy?'disabled':'')+'>'+socialIcons[provider]+'<span>Continue with '+(provider==='google'?'Google':'Apple')+'</span></button>').join('')+'</div><p class="billnest-social-note">Enter your name and mobile number first. Your provider supplies the verified email.</p>';}
+ const socialIcons={google:'<svg viewBox="0 0 48 48" width="19" height="19" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.2 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5Z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.95-2.24 5.46-4.76 7.16l7.73 6C44.42 38 46.98 31.85 46.98 24.55Z"/><path fill="#FBBC05" d="M10.53 28.59A14.4 14.4 0 0 1 9.75 24c0-1.59.27-3.12.78-4.59l-7.98-6.19A23.9 23.9 0 0 0 0 24c0 3.87.93 7.53 2.56 10.78l7.97-6.19Z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.91-5.82l-7.73-6c-2.15 1.45-4.92 2.31-8.18 2.31-6.26 0-11.57-4.22-13.47-9.9l-7.97 6.19C6.51 42.62 14.62 48 24 48Z"/></svg>'};
+ function socialMarkup(){return '<div class="billnest-social-divider"><span>or</span></div><div class="billnest-social-options"><button type="button" class="billnest-social-button" data-auth-social="google" '+(busy?'disabled':'')+'>'+socialIcons.google+'<span>Continue with Google</span></button></div><p class="billnest-social-note">Enter your name and mobile number first. Google supplies the verified email.</p>';}
  function render(){
   updateButton();
   if(layer.hidden)return;
@@ -299,11 +299,11 @@
   if(!target||busy)return;
   if(target.matches('[data-auth-close]')){close();return}
   if(target.matches('[data-auth-social]')){
-   if(mode!=='signup'||sent||account())return;
+   if(mode!=='signup'||sent||account()||target.dataset.authSocial!=='google')return;
    signupName=String(layer.querySelector('#billnestSignupName')?.value||'').trim();signupMobile=String(layer.querySelector('#billnestSignupMobile')?.value||'').trim();contact=String(layer.querySelector('#billnestAuthContact')?.value||'').trim();
    busy=true;layer.querySelectorAll('button,input').forEach(el=>el.disabled=true);
-   message('Connecting to '+(target.dataset.authSocial==='google'?'Google':'Apple')+'…');
-   cloud.startSocialSignIn(target.dataset.authSocial,{full_name:signupName,contact_mobile:signupMobile}).catch(err=>{busy=false;render();message(err.message||'Could not start account creation.',true);});return;
+   message('Connecting to Google…');
+   cloud.startSocialSignIn('google',{full_name:signupName,contact_mobile:signupMobile}).catch(err=>{busy=false;render();message(err.message||'Could not start account creation.',true);});return;
   }
   if(target.matches('[data-auth-use-email]')){channel='email';resetFlow();render();layer.querySelector('#billnestAuthContact')?.focus();return}
   if(target.matches('[data-auth-mode]')){
